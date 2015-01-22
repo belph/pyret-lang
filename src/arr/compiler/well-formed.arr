@@ -9,6 +9,7 @@ import ast as A
 import srcloc as SL
 import "compiler/compile-structs.arr" as C
 import format as F
+import string-dict as SD
 
 type Loc = SL.Srcloc
 
@@ -20,45 +21,45 @@ var PARAM-current-where-everywhere = false # TODO: What does this mean? (used by
 
 is-s-let = A.is-s-let # ANNOYING WORKAROUND
 
-reserved-names = [list: 
-  "function",
-  "break",
-  "return",
-  "do",
-  "yield",
-  "throw",
-  "continue",
-  "while",
-  "class",
-  "interface",
-  "type",
-  "generator",
-  "alias",
-  "extends",
-  "implements",
-  "module",
-  "package",
-  "namespace",
-  "use",
-  "public",
-  "private",
-  "protected",
-  "static",
-  "const",
-  "enum",
-  "super",
-  "export",
-  "new",
-  "try",
-  "finally",
-  "debug",
-  "spy",
-  "switch",
-  "this",
-  "match",
-  "case",
-  "with",
-  "__proto__"
+reserved-names = [SD.string-dict: 
+  "function", true,
+  "break", true,
+  "return", true,
+  "do", true,
+  "yield", true,
+  "throw", true,
+  "continue", true,
+  "while", true,
+  "class", true,
+  "interface", true,
+  "type", true,
+  "generator", true,
+  "alias", true,
+  "extends", true,
+  "implements", true,
+  "module", true,
+  "package", true,
+  "namespace", true,
+  "use", true,
+  "public", true,
+  "private", true,
+  "protected", true,
+  "static", true,
+  "const", true,
+  "enum", true,
+  "super", true,
+  "export", true,
+  "new", true,
+  "try", true,
+  "finally", true,
+  "debug", true,
+  "spy", true,
+  "switch", true,
+  "this", true,
+  "match", true,
+  "case", true,
+  "with", true,
+  "__proto__", true
 ]
 
 
@@ -126,14 +127,22 @@ fun ensure-unique-ids(bindings :: List<A.Bind>):
     | link(f, rest) =>
       cases(A.Bind) f:
         | s-bind(l, shadows, id, ann) =>
-          if A.is-s-underscore(id): nothing
-          else:
-            elt = lists.find(lam(b): b.id == id end, rest)
-            cases(Option) elt:
-              | some(found) =>
-                wf-error2("Found duplicate id " + tostring(id) + " in list of bindings", l, found.l)
-              | none => nothing
-            end
+          cases(A.Name) id:
+            | s-underscore(_) => nothing
+            | s-name(_, name) =>
+              elt = lists.find(lam(b): A.is-s-name(b.id) and (b.id.s == name) end, rest)
+              cases(Option) elt:
+                | some(found) =>
+                  wf-error2("Found duplicate id " + tostring(id) + " in list of bindings", l, found.l)
+                | none => nothing
+              end
+            | else =>
+              elt = lists.find(lam(b): b.id == id end, rest)
+              cases(Option) elt:
+                | some(found) =>
+                  wf-error2("Found duplicate id " + tostring(id) + " in list of bindings", l, found.l)
+                | none => nothing
+              end
           end
       end
       ensure-unique-ids(rest)
@@ -172,6 +181,14 @@ fun ensure-unique-fields(rev-fields):
       end
       ensure-unique-fields(rest)
   end
+end
+
+fun check-underscore-name(fields, kind-of-thing :: String) -> Boolean:
+  underscores = fields.filter(lam(f): f.name == "_" end)
+  when not(is-empty(underscores)):
+    wf-error("Cannot use underscore as a " + kind-of-thing, underscores.first.l)
+  end
+  is-empty(underscores)
 end
 
 fun ensure-distinct-lines(loc :: Loc, stmts :: List<A.Expr>):
@@ -213,8 +230,6 @@ fun wf-last-stmt(stmt :: A.Expr):
     | s-fun(l, _, _, _, _, _, _, _) => wf-error("Cannot end a block in a fun-binding", l)
     | s-data(l, _, _, _, _, _, _) => wf-error("Cannot end a block with a data definition", l)
     | s-datatype(l, _, _, _, _) => wf-error("Cannot end a block with a datatype definition", l)
-    | s-graph(l, _) => wf-error("Cannot end a block with a graph definition", l)
-    | s-m-graph(l, _) => wf-error("Cannot end a block with a graph definition", l)
     | else => nothing
   end
 end
@@ -337,7 +352,7 @@ well-formed-visitor = A.default-iter-visitor.{
     end
   end,
   s-bind(self, l, shadows, name, ann):
-    when (reserved-names.member(tostring(name))):
+    when (reserved-names.has-key(tostring(name))):
       reserved-name(l, tostring(name))
     end
     when shadows and A.is-s-underscore(name):
@@ -368,7 +383,7 @@ well-formed-visitor = A.default-iter-visitor.{
     left.visit(self) and self.option(right)
   end,
   s-method-field(self, l, name, params, args, ann, doc, body, _check):
-    when reserved-names.member(name):
+    when reserved-names.has-key(name):
       reserved-name(l, name)
     end
     when args.length() == 0:
@@ -382,13 +397,13 @@ well-formed-visitor = A.default-iter-visitor.{
     lists.all(_.visit(self), args) and ann.visit(self) and body.visit(self) and wrap-visit-check(self, _check)
   end,
   s-data-field(self, l, name, value):
-    when reserved-names.member(name):
+    when reserved-names.has-key(name):
       reserved-name(l, name)
     end
     value.visit(self)
   end,
   s-mutable-field(self, l, name, ann, value):
-    when reserved-names.member(name):
+    when reserved-names.has-key(name):
       reserved-name(l, name)
     end
     ann.visit(self) and value.visit(self)
@@ -414,7 +429,7 @@ well-formed-visitor = A.default-iter-visitor.{
     and lists.all(_.visit(self), args) and ann.visit(self) and body.visit(self) and wrap-visit-check(self, _check)
   end,
   s-fun(self, l, name, params, args, ann, doc, body, _check):
-    when reserved-names.member(name):
+    when reserved-names.has-key(name):
       reserved-name(l, name)
     end
     ensure-unique-ids(args)
@@ -423,19 +438,8 @@ well-formed-visitor = A.default-iter-visitor.{
   end,
   s-obj(self, l, fields):
     ensure-unique-fields(fields.reverse())
+    check-underscore-name(fields, "field name")
     lists.all(_.visit(self), fields)
-  end,
-  s-m-graph(self, l, bindings):
-    for each(binding from bindings):
-      when A.is-s-underscore(binding.name.id):
-        add-error(C.pointless-graph-id(binding.l))
-      end
-    end
-    lists.all(_.visit(self), bindings)
-  end,
-  s-graph(self, l, bindings):
-    add-error(C.wf-err("graph expressions are not yet supported", l))
-    false
   end,
   s-check(self, l, name, body, keyword-check):
     wrap-visit-check(self, some(body))
@@ -461,7 +465,7 @@ well-formed-visitor = A.default-iter-visitor.{
     true
   end,
   s-id(self, l, id):
-    when (reserved-names.member(tostring(id))):
+    when (reserved-names.has-key(tostring(id))):
       reserved-name(l, tostring(id))
     end
     true
@@ -495,23 +499,33 @@ top-level-visitor = A.default-iter-visitor.{
     true
   end,
   s-variant(self, l, constr-loc, name, binds, with-members):
-    ensure-unique-ids(fields-to-binds(with-members) + binds.map(_.bind) + cur-shared)
-    lists.all(_.visit(well-formed-visitor), binds) and lists.all(_.visit(well-formed-visitor), with-members)
+    ids = fields-to-binds(with-members) + binds.map(_.bind)
+    ensure-unique-ids(ids)
+    underscores = binds.filter(lam(b): A.is-s-underscore(b.bind.id) end)
+    when not(is-empty(underscores)):
+      wf-error("Cannot use underscore as a field name in data variant ", underscores.first.l)
+    end
+    check-underscore-name(with-members, "field name")
+    is-empty(underscores) and
+      lists.all(_.visit(well-formed-visitor), binds) and lists.all(_.visit(well-formed-visitor), with-members)
   end,
   s-singleton-variant(self, l, name, with-members):
-    ensure-unique-ids(fields-to-binds(with-members) + cur-shared)
+    ensure-unique-ids(fields-to-binds(with-members))
     lists.all(_.visit(well-formed-visitor), with-members)
   end,
   s-data(self, l, name, params, mixins, variants, shares, _check):
     ensure-unique-variant-ids(variants)
+    check-underscore-name(variants, "data variant name")
+    check-underscore-name(shares, "shared field name")
+    check-underscore-name([list: {l: l, name: name}], "datatype name")
     the-cur-shared = cur-shared
     cur-shared := fields-to-binds(shares)
-    ret = lists.all(_.visit(well-formed-visitor), params)
-    and lists.all(_.visit(well-formed-visitor), mixins)
-    and lists.all(_.visit(well-formed-visitor), variants)
-    and lists.all(_.visit(well-formed-visitor), shares)
+    params-v = lists.all(_.visit(well-formed-visitor), params)
+    mixins-v = lists.all(_.visit(well-formed-visitor), mixins)
+    variants-v = lists.all(_.visit(self), variants)
+    shares-v = lists.all(_.visit(well-formed-visitor), shares)
     cur-shared := the-cur-shared
-    ret and wrap-visit-check(well-formed-visitor, _check)
+    params-v and mixins-v and variants-v and shares-v and wrap-visit-check(well-formed-visitor, _check)
   end,
   s-datatype-variant(self, l, name, binds, constructor):
     ensure-unique-ids(fields-to-binds(binds))
@@ -519,6 +533,10 @@ top-level-visitor = A.default-iter-visitor.{
   end,
   s-data-expr(self, l, name, namet, params, mixins, variants, shared, _check):
     ensure-unique-variant-ids(variants)
+    underscores = variants.filter(lam(v): v.name == "_" end)
+    when not(is-empty(underscores)):
+      wf-error("Cannot use underscore as a data variant name ", underscores.first.l)
+    end
     the-cur-shared = cur-shared
     cur-shared := fields-to-binds(shared)
     ret = lists.all(_.visit(well-formed-visitor), params)
@@ -526,7 +544,8 @@ top-level-visitor = A.default-iter-visitor.{
     and lists.all(_.visit(well-formed-visitor), variants)
     and lists.all(_.visit(well-formed-visitor), shared)
     cur-shared := the-cur-shared
-    ret and wrap-visit-check(well-formed-visitor, _check)
+    is-empty(underscores) and
+      ret and wrap-visit-check(well-formed-visitor, _check)
   end,
 
 
@@ -591,9 +610,6 @@ top-level-visitor = A.default-iter-visitor.{
   s-ref(_, l :: Loc, ann :: A.Ann):
     well-formed-visitor.s-ref(l, ann)
   end,
-  s-graph(_, l :: Loc, bindings :: List<A.Expr%(is-s-let)>): # PROBLEM HERE
-    well-formed-visitor.s-graph(l, bindings)
-  end,
   s-when(_, l :: Loc, test :: A.Expr, block :: A.Expr):
     well-formed-visitor.s-when(l, test, block)
   end,
@@ -632,9 +648,6 @@ top-level-visitor = A.default-iter-visitor.{
   end,
   s-cases-else(_, l :: Loc, typ :: A.Ann, val :: A.Expr, branches :: List<A.CasesBranch>, _else :: A.Expr):
     well-formed-visitor.s-cases-else(l, typ, val, branches, _else)
-  end,
-  s-try(_, l :: Loc, body :: A.Expr, id :: A.Bind, _except :: A.Expr):
-    well-formed-visitor.s-try(l, body, id, _except)
   end,
   s-op(_, l :: Loc, op :: String, left :: A.Expr, right :: A.Expr):
     well-formed-visitor.s-op(l, op, left, right)
@@ -713,9 +726,6 @@ top-level-visitor = A.default-iter-visitor.{
   end,
   s-variant-member(_, l :: Loc, member-type :: A.VariantMemberType, bind :: A.Bind):
     well-formed-visitor.s-variant-member(l, member-type, bind)
-  end,
-  s-variant(_, l :: Loc, constr-loc :: Loc, name :: String, members :: List<A.VariantMember>, with-members :: List<A.Member>):
-    well-formed-visitor.s-variant(l, constr-loc, name, members, with-members)
   end,
   s-datatype-singleton-variant(_, l :: Loc, name :: String, constructor :: A.Constructor):
     well-formed-visitor.s-datatype-singleton-variant(l, name, constructor)
