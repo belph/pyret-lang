@@ -8,6 +8,7 @@ This section contains information on libraries that come with Pyret.
 
 
 @include-section["trove/lists.scrbl"]
+@include-section["trove/matrices.scrbl"]
 @include-section["trove/sets.scrbl"]
 @include-section["trove/arrays.scrbl"]
 @include-section["trove/string-dict.scrbl"]
