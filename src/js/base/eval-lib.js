@@ -8,15 +8,14 @@ define([
     "compiler/compile.arr",
     "compiler/repl-support.arr",
     "trove/parse-pyret",
-    "trove/checker"],
-function(q, loader, rtLib, dialectsLib, ffiHelpersLib, csLib, compLib, replLib, parseLib, checkerLib) {
-  if(requirejs.isBrowser) {
+    "trove/checker",
+    "js/runtime-util"],
+function(q, loader, rtLib, dialectsLib, ffiHelpersLib, csLib, compLib, replLib, parseLib, checkerLib, util) {
+  if(util.isBrowser()) {
     var r = requirejs;
-    var define = window.define;
   }
   else {
     var r = require("requirejs");
-    var define = r.define;
   }
   function randomName() { 
     return "anon" + Math.floor(Math.random() * 10000000);
@@ -52,6 +51,7 @@ function(q, loader, rtLib, dialectsLib, ffiHelpersLib, csLib, compLib, replLib, 
                   runtime.makeObject({
                     "check-mode": runtime.pyretTrue,
                     "allow-shadowed": runtime.pyretFalse,
+                    "proper-tail-calls": options.properTailCalls || true,
                     "collect-all": runtime.pyretFalse,
                     "type-check": runtime.makeBoolean(options.typeCheck || false),
                     "ignore-unbound": runtime.pyretFalse
@@ -207,6 +207,10 @@ function(q, loader, rtLib, dialectsLib, ffiHelpersLib, csLib, compLib, replLib, 
     });
   }
 
+  function runLoadParsedPyret(runtime, ast, options, ondone) {
+    runtime.runThunk(function() { return loadParsedPyret(runtime, ast, options); }, ondone);
+  }
+  
   function loadParsedPyret(runtime, ast, options) {
     if (!options.hasOwnProperty("name")) { options.name = randomName(); }
     var modname = options.name;
@@ -269,7 +273,9 @@ function(q, loader, rtLib, dialectsLib, ffiHelpersLib, csLib, compLib, replLib, 
     runCompileSrcPyret: runCompileSrcPyret,
     compileSrcPyret: compileSrcPyret,
     runEvalParsedPyret: runEvalParsedPyret,
-    evalParsedPyret: evalParsedPyret
+    evalParsedPyret: evalParsedPyret,
+    loadParsedPyret: loadParsedPyret,
+    runLoadParsedPyret: runLoadParsedPyret
   };
   
 });
