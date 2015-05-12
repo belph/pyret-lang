@@ -419,7 +419,7 @@
 The @pyret{Vector} type represents mathematical vectors. The datatype is equivalent to that of a @pyret{list} of numbers.
 
 @section{The @pyret{vector} Constructor}
-@collection-doc["vector" (list (cons "elt" N)) vec-type]
+@collection-doc["vector" #:contract `(a-arrow ("elt" ,N) ,vec-type)]
 
 Vector constructor which works in an identical manner to the @pyret{list} constructor.
 
@@ -444,7 +444,7 @@ Vector constructor which works in an identical manner to the @pyret{list} constr
 
 @section{Matrix Constructors}
 
-@collection-doc["matrix(rows,cols)" (list (cons "elt" N)) mtx-type]
+@collection-doc["matrix(rows,cols)" #:contract `(a-arrow ("elt" ,N) ,mtx-type)]
 
 Publicly exposed constructor which constructs a matrix of size 
 @pyret{rows} by @pyret{cols} with the given elements, entered row by row.
@@ -456,7 +456,7 @@ Publicly exposed constructor which constructs a matrix of size
   #   4   5   6
 }
 
-@collection-doc["row-matrix" (list (cons "elt" N)) mtx-type]
+@collection-doc["row-matrix" #:contract `(a-arrow ("elt" ,N) ,mtx-type)]
 
 Constructor which returns a one-row matrix containing the given entries.
 
@@ -466,7 +466,7 @@ check:
 end
 }
 
-@collection-doc["col-matrix" (list (cons "elt" N)) mtx-type]
+@collection-doc["col-matrix" #:contract `(a-arrow ("elt" ,N) ,mtx-type)]
 
 Constructor which returns a one-column matrix containing the given entries.
 
