@@ -1,7 +1,53 @@
 #lang scribble/base
-@(require "../../scribble-api.rkt" (except-in "../abbrevs.rkt" L-of))
+@(require "../../scribble-api.rkt"
+          (except-in "../abbrevs.rkt" L-of))
 @(require (only-in scribble/core delayed-block)
           (only-in scribble/manual math))
+
+@; Adapted from http://con.racket-lang.org/2011/pr-slides.pdf
+@; by Prabhakar Ragde
+@(require scribble/html-properties
+         scribble/base
+         scribble/core
+         (prefix-in net: net/url))
+ 
+@(provide mathjax-style math-in math-disp $ $$)
+ 
+@(define mathjax-source
+@(net:string->url "http://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"))
+
+@(define mathjax-style
+    (style #f (list (js-addition mathjax-source))))
+@(define (mymath start end . strs)
+@(make-element (make-style "relax" '(exact-chars)) `(,start ,@strs ,end)))
+ 
+@(define (math-in . strs)
+@(apply mymath "\\(" "\\)" strs))
+ 
+@(define (math-disp . strs)
+@(apply mymath "\\[" "\\]" strs))
+
+@; Creates a LaTeX inline environment
+@(define (math-in-env name . strs)
+@(apply mymath (string-append "\\(\\begin{" name "}") (string-append "\\end{" name "}\\)") strs))
+
+@; Creates a LaTeX environment
+@(define (math-disp-env name . strs)
+@(apply mymath (string-append "\\[\\begin{" name "}") (string-append "\\end{" name "}\\]") strs))
+
+@; Creates a Displayed Matrix
+@(define (math-mtx . strs)
+@(apply math-disp-env (cons "bmatrix" strs)))
+
+@; Creates an Inlined Matrix
+@(define (math-imtx . strs)
+@(apply mymath "\\(\\left[\\begin{smallmatrix}" "\\end{smallmatrix}\\right]\\)" strs))
+ 
+@(define $ math-in)
+@(define $$ math-disp) 
+
+
+
 
 @(define (matrix-method name #:args (args #f) #:return (return #f) #:contract (contract #f))
   (method-doc "Matrix" "matrix" name #:alt-docstrings "" #:args args #:return return #:contract contract))
@@ -422,8 +468,9 @@ The @pyret{Vector} type represents mathematical vectors. The datatype is equival
 @collection-doc["vector" #:contract `(a-arrow ("elt" ,N) ,vec-type)]
 
 Vector constructor which works in an identical manner to the @pyret{list} constructor.
+@para{@bold{WARNING:} Matrix rows and columns are @bold{1-indexed}.}
 
-@section{The Matrix Datatype}
+@section[#:style mathjax-style]{The Matrix Datatype}
 @data-spec["Matrix" (list
   @constructor-spec["Matrix" "matrix" (list `("rows" ("type" "normal") ("contract" ,N))
                                           `("cols" ("type" "normal") ("contract" ,N))
@@ -449,16 +496,17 @@ Vector constructor which works in an identical manner to the @pyret{list} constr
 Publicly exposed constructor which constructs a matrix of size 
 @pyret{rows} by @pyret{cols} with the given elements, entered row by row.
 
+The following example represents the matrix @math-imtx{1 & 2 & 3 \\ 4 & 5 & 6}:
+
 @examples{
 [matrix(2,3): 1, 2, 3, 4, 5, 6]
-  # Represents the matrix
-  #   1   2   3
-  #   4   5   6
 }
 
 @collection-doc["row-matrix" #:contract `(a-arrow ("elt" ,N) ,mtx-type)]
 
 Constructor which returns a one-row matrix containing the given entries.
+
+The following will construct the matrix @math-imtx{1 & 2 & 3}:
 
 @examples{
 check:
@@ -470,6 +518,8 @@ end
 
 Constructor which returns a one-column matrix containing the given entries.
 
+The following will construct the matrix @math-imtx{1 \\ 2 \\ 3}:
+
 @examples{
 check:
   [col-matrix: 1, 2, 3] is [matrix(3,1): 1, 2, 3]
@@ -478,7 +528,7 @@ end
 
 @function["identity-matrix"]
 
-Constructs an @pyret{n}-by-@pyret{n} identity matrix.
+Constructs an @pyret{n}@math-in{\times}@pyret{n} identity matrix.
 
 @examples{
 check:
@@ -500,7 +550,7 @@ end
 
 @function["build-matrix"]
 
-Constructs a matrix of the given size, where entry (i,j) is the result of @pyret{proc(i,j)}.
+Constructs a matrix of the given size, where entry @math{(i,j)} is the result of @pyret{proc(i,j)}.
 
 @examples{
 check:
@@ -514,7 +564,12 @@ These methods are available on all matrices.
 
 @matrix-method["rc-to-index"]
 
-Returns the RawArray index of the given row-column pair.
+Matrices are internally represented using @pyret{RawArray}s. 
+For example, the matrix @math-imtx{1 & 2 \\ 3 & 4} is internally
+represented by the one-dimensional array @pyret{[1, 2, 3, 4]}. 
+
+@pyret{rc-to-index} takes a row @math{i} and a column @math{j} and returns the internal 
+@pyret{RawArray} index of the item at that position.
 
 @examples{
 check:
@@ -536,7 +591,10 @@ end
 
 @matrix-method["to-list"]
 
-Returns the matrix as a list of numbers.
+Returns the matrix as a list of numbers (this is just the internal
+@pyret{RawArray} representation written as a list).
+
+For example, given the matrix @math-imtx{2 & 4 & 6 \\ 8 & 10 & 12 \\ 14 & 16 & 18}:
 
 @examples{
 check:
@@ -571,8 +629,11 @@ end
 
 @matrix-method["to-vectors"]
 
-Returns the matrix as a list of lists of numbers, with each list
-corresponding to one column.
+Returns the matrix as a list of lists of numbers (i.e. a list of @pyret{Vector}s), 
+with each list corresponding to one column.
+
+For example, the matrix @math-imtx{1 & 2 & 3 \\ 4 & 5 & 6} corresponds to the
+vectors @math-imtx{1 \\ 4}, @math-imtx{2 \\ 5}, and @math-imtx{3 \\ 6}: 
 
 @examples{
 check:
@@ -616,6 +677,24 @@ end
 Returns the submatrix of the matrix comprised of the intersection
 of the given list of rows and the given list of columns.
 
+For example, if our list of rows is @math-in{\{1, 2\}} and our
+list of columns is @math-in{\{2, 3\}}, then the positions in the
+resulting submatrix will be the elements with @math-in{(row,col)} positions
+@math-in{\{(1, 2), (1, 3), (2, 2), (2, 3)\}}.
+
+@math-in{
+\left[\begin{matrix} 
+            a_{11} & a_{12} & a_{13} \\
+            a_{21} & a_{22} & a_{23} \\
+            a_{31} & a_{32} & a_{33}
+            \end{matrix}\right]}@pyret{.submatrix([list: 1, 2], [list: 2, 3])}
+                                     @math-in{=
+\left[\begin{matrix}
+a_{12} & a_{13} \\
+a_{22} & a_{23}\end{matrix}\right]}
+
+This is shown in the below example:
+
 @examples{
 check:
   [matrix(3,3): 1, 2, 3, 4, 5, 6, 7, 8, 9].submatrix([list: 1, 2], [list: 2, 3]) is
@@ -625,7 +704,10 @@ end
 
 @matrix-method["transpose"]
 
-Returns the transposition of the matrix.
+Returns the transposition of the matrix. For example,
+@math-disp{\begin{bmatrix}1 & 2 & 3 \\ 4 & 5 & 6\end{bmatrix}
+                 \overrightarrow{Transpose}
+                 \begin{bmatrix}1 & 4 \\ 2 & 5 \\ 3 & 6\end{bmatrix}}
 
 @examples{
 check:
@@ -651,6 +733,8 @@ end
 @matrix-method["upper-triangle"]
 
 Returns the upper triangle of the matrix, if the matrix is square.
+For example, the upper triangle of @math-imtx{1 & 2 & 3\\ 4 & 5 & 6\\ 7 & 8 & 9}
+would be @math-imtx{1 & 2 & 3\\ 0 & 5 & 6 \\ 0 & 0 & 9}.
 
 @examples{
 check:
@@ -664,6 +748,8 @@ end
 @matrix-method["lower-triangle"]
 
 Returns the lower triangle of the matrix, if the matrix is square.
+For example, the upper triangle of @math-imtx{1 & 2 & 3\\ 4 & 5 & 6\\ 7 & 8 & 9}
+would be @math-imtx{1 & 0 & 0\\ 4 & 5 & 0\\ 7 & 8 & 9}.
 
 @examples{
 check:
@@ -677,6 +763,8 @@ end
 @matrix-method["row-list"]
 
 Returns the matrix as a list of one-row matrices.
+(Very similar to @pyret{to-lists()}, except this method
+returns a list of matrices instead.
 
 @examples{
 check:
@@ -689,6 +777,8 @@ end
 @matrix-method["col-list"]
 
 Returns the matrix as a list of one-column matrices.
+(Very similar to @pyret{to-vectors()}, except this method
+returns a list of matrices instead.
 
 @examples{
 check:
@@ -701,7 +791,7 @@ end
 
 @matrix-method["map"]
 
-Maps the given function over each entry in the matrix.
+Maps the given function entrywise over the matrix.
 
 @examples{
 check:
@@ -717,6 +807,8 @@ Maps the given function over each row in the matrix.
 
 @examples{
 check:
+  # sumRow :: 1*n matrix
+  # Computes the total sum of all entries in the given row
   sumRow = lam(row): [matrix(1,1): row.to-vector().foldr(_ + _)] end
   [matrix(2,3): 1, 2, 3, 4, 5, 6].row-map(sumRow) is
   [matrix(2,1): 6, 15]
@@ -729,6 +821,8 @@ Maps the given function over each column in the matrix.
 
 @examples{
 check:
+  # sumCol :: m*1 matrix
+  # Computes the total sum of all entries in the given column
   sumCol = lam(col): [matrix(1,1): col.to-vector().foldr(_ + _)] end
   [matrix(2,3): 1, 2, 3, 4, 5, 6].col-map(sumCol) is
   [matrix(1,3): 5, 7, 9]
@@ -737,7 +831,10 @@ end
 
 @matrix-method["augment"]
 
-Returns the matrix augmented with the given matrix.
+Returns the matrix augmented with the given matrix. For
+example, augmenting the matrix @math-imtx{1 & 2\\4 & 5} with
+the matrix @math-imtx{3\\ 6} yields the matrix
+@math-imtx{1 & 2 & 3\\ 4 & 5 & 6}.
 
 @examples{
 check:
@@ -748,7 +845,10 @@ end
 
 @matrix-method["stack"]
 
-Returns the matrix stacked on top of the given matrix.
+Returns the matrix stacked on top of the given matrix. For
+example, stacking the matrix @math-imtx{1 & 2 & 3} on top of
+the matrix @math-imtx{4 & 5 & 6} gives the matrix
+@math-imtx{1 & 2 & 3\\ 4 & 5 & 6}.
 
 @examples{
 check:
@@ -770,7 +870,7 @@ end
 
 @matrix-method["scale"]
 
-Scales the matrix by the given value.
+Multiplies each entry in the matrix by the given value.
 
 @examples{
 check:
@@ -785,7 +885,16 @@ end
 @matrix-method["dot"]
 
 Returns the Frobenius Product of the matrix with the given matrix (for
-1-dimensional matrices, this is simply the dot product).
+1-dimensional matrices, this is simply the dot product). This is done by
+multiplying the matrix with the transposition of @pyret{other} and taking
+the trace of the result. An example of this calculation (@math-in{\ast} 
+denotes matrix multiplication):
+
+@math-in{\left(\left[\begin{smallmatrix}1 & 2 & 3\end{smallmatrix}\right]
+\ast\left[\begin{smallmatrix}4\\ 2\\ ^4/_3 \end{smallmatrix}\right]\right)}@pyret{.trace()}
+@math-in{=
+\underbrace{\left[\begin{smallmatrix}(1\cdot 4)+(2\cdot 2)+(3\cdot \frac{4}{3})\end{smallmatrix}\right]}_{
+1\times 1 \text{ matrix}}}@pyret{.trace()}@math-in{=12}
 
 @examples{
 check:
@@ -828,7 +937,10 @@ Returns true if the matrix is invertible (i.e. it has a nonzero determinant).
 
 @matrix-method["rref"]
 
-Returns the Reduced Row Echelon Form of the matrix.
+Returns the Reduced Row Echelon Form of the matrix. For example:
+@math-disp{\begin{bmatrix}1 & 2 & 3 \\ 4 & 5 & 6\end{bmatrix}
+                 \overrightarrow{RREF}
+                 \begin{bmatrix}1 & 0 & -1\\ 0 & 1 & 2\end{bmatrix}}
 
 @examples{
 check:
@@ -839,13 +951,25 @@ end
 
 @matrix-method["inverse"]
 
-Returns the inverse of the matrix, if it is invertible.
+Returns the inverse of the matrix, if it is invertible (found
+by augmenting the matrix with itself and finding the reduced-row
+echelon form). For example:
+@math-disp{\begin{bmatrix}1 & 0 & 4\\ 1 & 1 & 6\\ -3 & 0 & -10\end{bmatrix}^{-1}
+                 = \begin{bmatrix}-5 & 0 & -2\\ -4 & 1 & -1\\ ^3/_2 & 0 & ^1/_2\end{bmatrix}}
+
+@examples{
+check:
+  [mk-mtx(3,3): 1, 0, 4, 1, 1, 6, -3, 0, -10].inverse() is 
+  [mk-mtx(3,3): -5, 0, -2, -4, 1, -1, 3/2, 0, 1/2]
+end
+}
 
 @matrix-method["solve"]
 
 Returns the matrix which, when multiplied on the right of this matrix, results in the given matrix.
 In other words, this returns the solution to the system of equations represented by this and the given matrix.
-This method only works on invertible matrices.
+This method only works on invertible matrices (Calculated by inverting itself and multiplying the given
+matrix on the right side of this inverse).
 
 @matrix-method["least-squares-solve"]
 
@@ -883,6 +1007,7 @@ the Q matrix and the second being the R matrix.
 @matrix-method["gram-schmidt"]
 
 Returns an orthogonal matrix whose image is the same as the span of the matrix's columns.
+(The same as the first result of @pyret{qr-decomposition})
 
 @section{@pyret{Matrix} Binary Operations}
 

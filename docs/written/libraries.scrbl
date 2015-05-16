@@ -18,6 +18,7 @@ This section contains information on libraries that come with Pyret.
 
 @include-section["trove/image-structs.js.rkt"]
 @include-section["trove/image.js.rkt"]
+@include-section["trove/image.scrbl"]
 @include-section["trove/world.js.rkt"]
 
 @include-section["trove/srcloc.js.rkt"]
