@@ -49,7 +49,7 @@ data Attribute:
     end,
     tosource(self):
       if (is-number(self.value) and not(num-is-integer(self.value))):
-        self.name + "=" + ensure-quoted(num-to-string-digits(self.value, 10))
+        self.name + "=" + ensure-quoted(num-to-string-digits(num-exact(self.value), 10))
       else:
         self.name + "=" + ensure-quoted(torepr(self.value))
       end
@@ -121,21 +121,21 @@ data Element:
     with:
     _torepr(self, shadow torepr):
       if (is-number(self.val) and not(num-is-integer(self.val))):
-        PP.str(num-to-string-digits(self.val, 10)).pretty(PRETTY-WIDTH).join-str("\n")
+        PP.str(num-to-string-digits(num-exact(self.val), 10)).pretty(PRETTY-WIDTH).join-str("\n")
       else:
         PP.str(tostring(self.val)).pretty(PRETTY-WIDTH).join-str("\n")
       end
     end,
     tosource-help(self):
       if (is-number(self.val) and not(num-is-integer(self.val))):
-        num-to-string-digits(self.val, 10)
+        num-to-string-digits(num-exact(self.val), 10)
       else:
         tostring(self.val)
       end
     end,
     tosource(self):
       if (is-number(self.val) and not(num-is-integer(self.val))):
-        num-to-string-digits(self.val, 10)
+        num-to-string-digits(num-exact(self.val), 10)
       else:
         torepr(self.val)
       end

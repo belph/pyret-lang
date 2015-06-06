@@ -18,12 +18,14 @@
           racket/runtime-path
           racket/base
           racket/system
+          racket/pretty
           (prefix-in xml: xml)
           (for-meta 2 racket/base)
           (for-template scribble/core scribble/html-properties)
           (for-syntax racket/base syntax/parse racket/list))
 
 (provide USE-PYRET
+         racket-comment
          process-examples)
 
 ;; Path to phase 1 main-wrapper.js
@@ -125,34 +127,87 @@
 ##    you're good to go.
 |#
 (define (process-examples examples return-continuation)
-  ;; (subprocess ...) returns a file port which might
-  ;; block if the output is too big
-  ;(if (> (length examples) 10)
-  ;    (let-values (((fst rst) (split-at examples 10)))
-  ;      (append (process-examples fst return-continuation)
-  ;              (process-examples rst return-continuation)))
-  (with-handlers ([exn:fail? (λ(e)(return-continuation examples))]
-                  [procedure? (λ(p)(p))])
+  (define examples-in-file (make-hash))
+    
   (let* ((file (make-pyret-temp-file))
          (prepped (prep-pyret-file-contents examples))
-         (fileport (open-output-file file  #:exists 'replace)))
+         (fileport (with-handlers ([exn:fail? (λ(e)(return-continuation examples))])
+                     (open-output-file file  #:exists 'replace))))
+    
+    (define filename (file-name-from-path file))
+    (define filename-rx (regexp (format "~a: line ([0-9]+)" filename)))
+    (define (get-line-range start end)
+      (let* ((best-start (get-best-line start))
+             (best-end (get-best-line end))
+             (rel-keys (sort (filter (λ(x)(<= best-start x best-end)) (hash-keys examples-in-file)) <))
+             (rel-lines (flatten (map (λ(key)(string-split (hash-ref examples-in-file key) "\n")) rel-keys)))
+             (line-padding (λ(lineno) (list->string (build-list (- (string-length (number->string best-end))
+                                                                   (string-length (number->string lineno))) (λ(n)#\Space))))))
+        (string-join (for/list ((lineno (in-range best-start best-end))
+                                (linestr rel-lines))
+                       (format "~a~a  ~a" (line-padding lineno) lineno linestr)) "\n")))
+        
+        
+    (port-count-lines! fileport)
+    (define (register-example example)
+      (let-values (((line col pos) (port-next-location fileport)))
+        (if (hash-has-key? examples-in-file line)
+            (raise (λ()(error (format "Multiple expressions on one line: ~nline: ~a~nold contents: ~a~nnew contents: ~a" 
+                           line (hash-ref examples-in-file line) example))))
+            (hash-set! examples-in-file line example))))
+    (define (get-best-line lineno)
+      (define (max-<= x)
+        (λ(a b) (if (or (> a x) (> b a)) b a)))
+      ;; First example line is on line 2
+      (foldr (max-<= lineno) 2 (hash-keys examples-in-file)))
+    (define (fetch-line lineno)
+      (let ((bestline (get-best-line lineno)))
+        (format (string-append 
+                 "~nRegion of error:~n~a"
+                 "~nHint: It looks like the problem might be with this example: ~n~a~n~n")
+                (get-line-range (- lineno 10) (+ lineno 10))
+                (hash-ref examples-in-file bestline))))
+    (define (fetch-from-error errmsg)
+      (let ((rxp-startRow (regexp-match #rx"startRow: ([0-9]+)" errmsg))
+            (rxp-pyret-stack (regexp-match filename-rx errmsg)))
+        (cond [(pair? rxp-startRow) (fetch-line (string->number (cadr rxp-startRow)))]
+              [(pair? rxp-pyret-stack) (fetch-line (string->number (cadr rxp-pyret-stack)))]
+              [else   ""])))
     (display IMAGE-IMPORT-STATEMENT fileport)
     (newline fileport)
     (for ((printstmt prepped))
+      (register-example printstmt)
       (display printstmt fileport)
+      
       (newline fileport)
       )
     (close-output-port fileport)
     (eprintf ".")
     (define pyret-output (get-pyret-output file))
     (unless (check-didnt-fail (open-input-string pyret-output))
-      (raise (λ()(newline)(error 
-                           (format "Pyret raised an error while running your examples: \n ~a" 
-                                   pyret-output)))))
+      (newline)(error 
+                           (format "Pyret raised an error while running your examples: \n ~a~a" 
+                                   pyret-output
+                                   (fetch-from-error pyret-output))))
     (let loop ((result (open-input-string pyret-output))
                (sofar '()))
               (let ((in (read result)))
                 (cond [(eof-object? in) (reverse (cdr sofar))] ;; The first value of sofar will be the 
                                                                ;; #t return value from (system ...)
                       [(cons? in) (loop result (cons in sofar))]
-                      [else (loop result sofar)]))))))
+                      [else (loop result sofar)])))))
+
+(pretty-print-columns 50)
+(define (racket-comment datum)
+  (define EXAMPLES-PREFIX "# Racket equivalent: ")
+  (define BUFFER (list->string (cons #\# (build-list 
+                                          (sub1 (string-length EXAMPLES-PREFIX)) 
+                                          (λ(n)#\Space)))))
+  (define prt (open-output-string))
+  (pretty-write datum prt)
+  (define pretty-str (begin0 (get-output-string prt)
+                             (close-output-port prt)))
+  (let ((split-up (string-split pretty-str "\n")))
+    (cons (string-append EXAMPLES-PREFIX (car split-up)) 
+          (map (λ(s)(string-append BUFFER s)) (cdr split-up)))))
+  

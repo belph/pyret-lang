@@ -277,6 +277,10 @@ data CornerBox:
         cornerbox(new-tl, new-br)
       end
     end,
+	get-center(self) -> IM_AUX.Position:
+	  doc: "Returns the center of this CornerBox"
+	  IM_AUX.posn(num-round-even((self.bottom-right.x + self.top-left.x) / 2), num-round-even((self.bottom-right.y + self.top-left.y) / 2))
+	end,
     to-box(self) -> IM_AUX.Box:
       doc: "Converts the CornerBox into a normal Box"
       IM_AUX.box((self.bottom-right.x - self.top-left.x), (self.bottom-right.y - self.top-left.y))

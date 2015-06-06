@@ -8,7 +8,87 @@
           scribble/base
           "../../image-syntax.rkt")
 
-@(define I (a-id "Image" (xref "pyret-image" "Image")))
+@(define I (a-id "Image"))
+@(define XP (a-id "X-Place" (xref "pyret-image" "X-Place")))
+@(define YP (a-id "Y-Place" (xref "pyret-image" "Y-Place")))
+
+@(append-gen-docs
+  `(module "pyret-image"
+     (path "src/js/base/runtime-anf.js")
+     (data-spec 
+      (name "Image")
+      (variants ("polygon")) ;; Not going to be listed anyway
+      (shared
+        ((method-spec
+         (name "flip-horizontal")
+         (arity 1)
+         (args ("self"))
+         (return ,I)
+         (contract (a-arrow ,I ,I)))
+        (method-spec
+         (name "flip-vertical")
+         (arity 1)
+         (args ("self"))
+         (return ,I)
+         (contract (a-arrow ,I ,I)))
+        (method-spec
+         (name "scale-x")
+         (arity 2)
+         (args ("self" "scale"))
+         (return ,I)
+         (contract (a-arrow ,I ,N ,I)))
+        (method-spec
+         (name "scale-y")
+         (arity 2)
+         (args ("self" "scale"))
+         (return ,I)
+         (contract (a-arrow ,I ,N ,I)))
+        (method-spec
+         (name "scale-xy")
+         (arity 3)
+         (args ("self" "x-scale" "y-scale"))
+         (return ,I)
+         (contract (a-arrow ,I ,N ,N ,I)))
+        (method-spec
+         (name "scale")
+         (arity 2)
+         (args ("self" "scale"))
+         (return ,I)
+         (contract (a-arrow ,I ,N ,I)))
+        (method-spec
+         (name "rotate")
+         (arity 2)
+         (args ("self" "theta"))
+         (return ,I)
+         (contract (a-arrow ,I ,N ,I)))
+        (method-spec
+         (name "crop")
+         (arity 5)
+         (args ("self" "x" "y" "width" "height"))
+         (return ,I)
+         (contract (a-arrow ,I ,N ,N ,N ,N ,I)))
+        (method-spec
+         (name "crop-align")
+         (arity 5)
+         (args ("self" "x-place" "y-place" "width" "height"))
+         (return ,I)
+         (contract (a-arrow ,I ,XP ,YP ,N ,N ,I)))
+        (method-spec
+         (name "width")
+         (arity 1)
+         (args ("self"))
+         (return ,N)
+         (contract (a-arrow ,I ,N)))
+        (method-spec
+         (name "height")
+         (arity 1)
+         (args ("self"))
+         (return ,N)
+         (contract (a-arrow ,I ,N))))))))
+
+
+@(define (image-method name #:args (args #f) #:return (return #f) #:contract (contract #f) . body)
+   (apply method-doc "Image" "polygon" name #:alt-docstrings "" #:args args #:return return #:contract contract body))
 
 @docmodule["pyret-image"]{
 @section{Construction Tape Ahead}
@@ -193,15 +273,451 @@ second argument, which goes on top of the third argument, etc. The images are al
 @image-examples[#:racket (overlay (rectangle 30 60 'solid 'orange)
                                   (ellipse 60 30 'solid 'purple))
                          "overlay(rectangle(30, 60, solid, orange), 
-                                  ellipse(60, 30, solid, purple))"
+         ellipse(60, 30, solid, purple))"
                          "overlay(ellipse(10, 10, solid, red),
-                                  overlay(ellipse(20, 20, solid, black),
-                                  overlay(ellipse(30, 30, solid, red),
-                                  overlay(ellipse(40, 40, solid, black),
-                                  overlay(ellipse(50, 50, solid, red),
-                                  ellipse(60, 60, solid, black))))))"]
+         overlay(ellipse(20, 20, solid, black),
+         overlay(ellipse(30, 30, solid, red),
+         overlay(ellipse(40, 40, solid, black),
+         overlay(ellipse(50, 50, solid, red),
+         ellipse(60, 60, solid, black))))))"]
 }
 
+@function["overlay-align"]{Overlays all of its image arguments, much like the @pyret{overlay} function, but using 
+                           @pyret{x-place} and @pyret{y-place} to determine where the images are lined up. For example, 
+                           if @pyret{x-place} is @pyret{x-center}and @pyret{y-place} is @pyret{y-center}, then the images are 
+                           lined up on their centers.
+                           
+                           @image-examples[#:racket (overlay/align "left" "middle"
+                                                                   (rectangle 30 60 "solid" "orange")
+                                                                   (ellipse 60 30 "solid" "purple"))
+                                                    "overlay-align(x-left, y-center, rectangle(30, 60, solid, orange),
+                                 ellipse(60, 30, solid, purple))"
+                                                    "overlay-align(x-right, y-bottom, rectangle(20, 20, solid, silver),
+        overlay-align(x-right, y-bottom, rectangle(30, 30, solid, seagreen),
+        overlay-align(x-right, y-bottom, rectangle(40, 40, solid, silver),
+                      rectangle(50, 50, solid, seagreen))))"]}
 
+@function["overlay-offset"]{Just like @pyret{overlay}, this function lines up its image arguments on top of each other. 
+                            Unlike @pyret{overlay}, it moves @pyret{i2} by @pyret{x} pixels to the right and 
+                            @pyret{y} down before overlaying them.
+                                      
+                            @image-examples[#:racket (overlay/offset (circle 40 "solid" "red")
+                                                                     10 10
+                                                                     (circle 40 "solid" "blue"))
+                                                     "overlay-offset(circle(40, solid, red), 10, 10, circle(40, solid, blue))"
+                                                     "overlay-offset(overlay-offset(rectangle(60, 20, solid, black),
+                              -50, 0, circle(20, solid, darkorange)), 
+               70, 0, circle(20, solid, darkorange))"
+                                                     "overlay-offset(overlay-offset(circle(30, solid, rgba-color(0, 150, 0, 127)),
+                              26, 0, circle(30, solid, rgba-color(0, 0, 255, 127))), 
+               0, 26, circle(30, solid, rgba-color(200, 0, 0, 127)))"]}
+
+
+@function["overlay-align-offset"]{Overlays image @pyret{i1} on top of @pyret{i2}, using @pyret{x-place} and @pyret{y-place} 
+                                  as the starting points for the overlaying, and then adjusts @pyret{i2} by @pyret{x} to the 
+                                  right and @pyret{y} pixels down.
+
+                                  This function combines the capabilities of @pyret{overlay-align} and @pyret{overlay-offset}.
+                                  
+                                  @image-examples[#:racket (overlay/align/offset
+                                                            "right" "bottom"
+                                                            (star-polygon 20 20 3 "solid" "navy")
+                                                            10 10
+                                                            (circle 30 "solid" "cornflowerblue"))
+                                                           "overlay-align-offset(x-right, y-bottom, star-polygon(20, 20, 3, solid, navy),
+                     10, 10, circle(30, solid, cornflowerblue))"
+                                                           "overlay-align-offset(x-left, y-bottom, star-polygon(20, 20, 3, solid, navy),
+                     -10, 10, circle(30, solid, cornflowerblue))"]}
+
+@function["overlay-xy"]{Constructs an image by overlaying @pyret{i1} on top of @pyret{i2}. The images are initially lined up 
+                        on their upper-left corners and then @pyret{i2} is shifted to the right by @pyret{x} pixels to and down 
+                        by @pyret{y} pixels.
+
+                        This is the same as @pyret{underlay-xy(i2, (-1 * x), (-1 * y), i1)}.
+
+                        See also @pyret{overlay-offset} and @pyret{underlay-offset}.
+                        
+                        @image-examples[#:racket (overlay/xy (rectangle 20 20 "outline" "black")
+                                                             20 0
+                                                             (rectangle 20 20 "outline" "black"))
+                                                 "overlay-xy(rectangle(20, 20, outline, black), 20, 0, rectangle(20, 20, outline, black))"
+                                                 "overlay-xy(rectangle(20, 20, solid, red), 10, 10, rectangle(20, 20, solid, black))"
+                                                 "overlay-xy(rectangle(20, 20, solid, red), -10, -10, rectangle(20, 20, solid, black))"
+                                                 "overlay-xy(overlay-xy(ellipse(40, 40, outline, black), 10, 15,
+                      ellipse(10, 10, solid, forestgreen)), 
+           20, 15, ellipse(10, 10, solid, forestgreen))"]}
+
+@function["underlay"]{Underlays its arguments building a single image.
+                      
+                      It behaves like overlay, but with the arguments in the reverse order. 
+                      That is, the first argument goes underneath of the second argument. 
+                      The images are all lined up on their centers.
+                      
+                      @image-examples[#:racket (underlay (rectangle 30 60 "solid" "orange")
+                                                         (ellipse 60 30 "solid" "purple"))
+                                               "underlay(rectangle(30, 60, solid, orange), 
+         ellipse(60, 30, solid, purple))"
+                                               "underlay(ellipse(10, 60, solid, red),
+         underlay(ellipse(20, 50, solid, black),
+         underlay(ellipse(30, 40, solid, red),
+         underlay(ellipse(40, 30, solid, black),
+         underlay(ellipse(50, 20, solid, red),
+                  ellipse(60, 10, solid, black))))))"]}
+
+@function["underlay-align"]{Underlays its image arguments, much like the @pyret{underlay} function, 
+                            but using @pyret{x-place} and @pyret{y-place} to determine where the 
+                            images are lined up. For example, if @pyret{x-place} is @pyret{x-middle} 
+                            and @pyret{y-place} is @pyret{y-center}, then the images are lined up on their centers.
+                            
+                            @image-examples[#:racket (underlay/align "left" "middle"
+                                                                     (rectangle 30 60 "solid" "orange")
+                                                                     (ellipse 60 30 "solid" "purple"))
+                                               "underlay-align(x-left, y-center, rectangle(30, 60, solid, orange),
+                                 ellipse(60, 30, solid, purple))"
+                                               "underlay-align(x-right, y-top, rectangle(50, 50, solid, seagreen),
+         underlay-align(x-right, y-top, rectangle(40, 40, solid, silver),
+         underlay-align(x-right, y-top, rectangle(30, 30, solid, seagreen),
+                    rectangle(20, 20, solid, silver))))"]}
+
+@function["underlay-offset"]{Just like @pyret{underlay}, this function lines up its first image argument underneath the second. 
+                             Unlike @pyret{underlay}, it moves @pyret{i2} by @pyret{x} pixels to the right and @pyret{y} 
+                             down before underlaying them.
+                             
+                             @image-examples[#:racket (underlay/offset (circle 40 "solid" "red")
+                                                                       10 10
+                                                                       (circle 40 "solid" "blue"))
+                                                      "underlay-offset(circle(40, solid, red), 10, 10, circle(40, solid, blue))"
+                                                      "underlay-offset(circle(40, solid, gray), 0, -10,
+                underlay-offset(circle(10, solid, navy), 
+                                -30, 0, circle(10, solid, navy)))"]}
+
+@function["underlay-align-offset"]{Underlays image @pyret{i1} underneath @pyret{i2}, using @pyret{x-place} 
+                                   and @pyret{y-place} as the starting points for the combination, and then 
+                                   adjusts @pyret{i2} by @pyret{x} to the right and @pyret{y} pixels down.
+                                   
+                                   This function combines the capabilities of @pyret{underlay-align} and @pyret{underlay-offset}.
+                                   
+                                   @image-examples[#:racket (underlay/align/offset
+                                                             "right" "bottom"
+                                                             (star-polygon 20 20 3 "solid" "navy")
+                                                             10 10
+                                                             (circle 30 "solid" "cornflowerblue"))
+                                                            "underlay-align-offset(x-right, y-bottom, star-polygon(20, 20, 3, solid, navy),
+                      10, 10, circle(30, solid, cornflowerblue))"
+                                                            "underlay-align-offset(x-right, y-bottom,
+  underlay-align-offset(x-left, y-bottom,
+    underlay-align-offset(x-right, y-top,
+      underlay-align-offset(x-left, y-top, 
+                            rhombus(120, 90, solid, navy), 16, 16,
+                            star-polygon(20, 11, 3, solid, cornflowerblue)),
+                          -16, 16, 
+                          star-polygon(20, 11, 3, solid, cornflowerblue)), 
+                        16, -16,
+                        star-polygon(20, 11, 3, solid, cornflowerblue)),
+                      -16, -16,
+                      star-polygon(20, 11, 3, solid, cornflowerblue))"]}
+
+@function["underlay-xy"]{Constructs an image by underlaying @pyret{i1} underneath @pyret{i2}. The images are initially lined up 
+                        on their upper-left corners and then @pyret{i2} is shifted to the right by @pyret{x} pixels to and down 
+                        by @pyret{y} pixels.
+
+                        This is the same as @pyret{overlay-xy(i2, (-1 * x), (-1 * y), i1)}.
+
+                        See also @pyret{underlay-offset} and @pyret{overlay-offset}.
+                        
+                        @image-examples[#:racket (underlay/xy (rectangle 20 20 "outline" "black")
+                                                              20 0
+                                                              (rectangle 20 20 "outline" "black"))
+                                                 "underlay-xy(rectangle(20, 20, outline, black), 20, 0, rectangle(20, 20, outline, black))"
+                                                 "underlay-xy(rectangle(20, 20, solid, red), 10, 10, rectangle(20, 20, solid, black))"
+                                                 "underlay-xy(rectangle(20, 20, solid, red), -10, -10, rectangle(20, 20, solid, black))"
+                                                 "underlay-xy(underlay-xy(ellipse(40, 40, solid, gray), 10, 15,
+                      ellipse(10, 10, solid, forestgreen)), 
+           20, 15, ellipse(10, 10, solid, forestgreen))"]}
+
+@function["beside"]{Constructs an image by placing @pyret{i1} and @pyret{i2} in a horizontal row, aligned along their centers.
+                    @image-examples[#:racket (beside (ellipse 20 70 "solid" "gray")
+                                                     (ellipse 20 50 "solid" "darkgray")
+                                                     (ellipse 20 30 "solid" "dimgray")
+                                                     (ellipse 20 10 "solid" "black"))
+                                             "beside(ellipse(20, 70, solid, gray),
+       beside(ellipse(20, 50, solid, darkgray), 
+       beside(ellipse(20, 30, solid, dimgray), 
+       ellipse(20, 10, solid, black))))"]}
+
+@function["beside-list"]{Similar to @pyret{beside}, except that it accepts a nonempty list of images.
+                               
+                         @image-examples[#:racket (beside (ellipse 20 70 "solid" "gray")
+                                                          (ellipse 20 50 "solid" "darkgray")
+                                                          (ellipse 20 30 "solid" "dimgray")
+                                                          (ellipse 20 10 "solid" "black"))
+                                                  "beside-list([list: ellipse(20, 70, solid, gray),
+                   ellipse(20, 50, solid, darkgray),
+                   ellipse(20, 30, solid, dimgray),
+                   ellipse(20, 10, solid, black)])"]}
+
+@function["beside-align"]{Constructs an image by placing all of the argument images in a horizontal row, lined up as indicated by the
+                          @pyret{y-place} argument. For example, if @pyret{y-place} is @pyret{y-center}, then the images are placed 
+                          side by side with their centers lined up with each other.
+                          
+                          @image-examples[#:racket (beside/align "bottom"
+                                                                 (ellipse 20 70 "solid" "lightsteelblue")
+                                                                 (ellipse 20 50 "solid" "mediumslateblue")
+                                                                 (ellipse 20 30 "solid" "slateblue")
+                                                                 (ellipse 20 10 "solid" "navy"))
+                                                   "beside-align(y-bottom, ellipse(20, 70, solid, lightsteelblue),
+             beside-align(y-bottom, ellipse(20, 50, solid, mediumslateblue), 
+             beside-align(y-bottom, ellipse(20, 30, solid, slateblue), 
+             ellipse(20, 10, solid, navy))))"
+                                                   "beside-align(y-top, ellipse(20, 70, solid, mediumorchid),
+             beside-align(y-top, ellipse(20, 50, solid, darkorchid), 
+             beside-align(y-top, ellipse(20, 30, solid, purple), 
+             ellipse(20, 10, solid, indigo))))"]}
+
+@function["beside-align-list"]{Similar to @pyret{beside-align}, except that it accepts a nonempty list of images.
+                                          
+                               @image-examples[#:racket (beside/align "bottom"
+                                                                      (ellipse 20 70 "solid" "lightsteelblue")
+                                                                      (ellipse 20 50 "solid" "mediumslateblue")
+                                                                      (ellipse 20 30 "solid" "slateblue")
+                                                                      (ellipse 20 10 "solid" "navy"))
+                                                        "beside-align-list(y-bottom, [list: ellipse(20, 70, solid, lightsteelblue),
+                                   ellipse(20, 50, solid, mediumslateblue),
+                                   ellipse(20, 30, solid, slateblue),
+                                   ellipse(20, 10, solid, navy)])"]}
+
+@function["above"]{Constructs an image by placing @pyret{i1} and @pyret{i2} in a vertical row, aligned along their centers.
+                    @image-examples[#:racket (above (ellipse 70 20 "solid" "gray")
+                                                    (ellipse 50 20 "solid" "darkgray")
+                                                    (ellipse 30 20 "solid" "dimgray")
+                                                    (ellipse 10 20 "solid" "black"))
+                                             "above(ellipse(70, 20, solid, gray),
+      above(ellipse(50, 20, solid, darkgray), 
+      above(ellipse(30, 20, solid, dimgray), 
+      ellipse(10, 20, solid, black))))"]}
+
+@function["above-list"]{Similar to @pyret{above}, except that it accepts a nonempty list of images.
+                               
+                        @image-examples[#:racket (above (ellipse 70 20 "solid" "gray")
+                                                        (ellipse 50 20 "solid" "darkgray")
+                                                        (ellipse 30 20 "solid" "dimgray")
+                                                        (ellipse 10 20 "solid" "black"))
+                                                  "above-list([list: ellipse(70, 20, solid, gray),
+                  ellipse(50, 20, solid, darkgray),
+                  ellipse(30, 20, solid, dimgray),
+                  ellipse(10, 20, solid, black)])"]}
+
+@function["above-align"]{Constructs an image by placing all of the argument images in a vertical row, lined up as indicated by the
+                         @pyret{x-place} argument. For example, if @pyret{x-place} is @pyret{x-middle}, then the images are placed 
+                         above each other with their centers lined up.
+                          
+                         @image-examples[#:racket (above/align "right"
+                                                               (ellipse 70 20 "solid" "gold")
+                                                               (ellipse 50 20 "solid" "goldenrod")
+                                                               (ellipse 30 20 "solid" "darkgoldenrod")
+                                                               (ellipse 10 20 "solid" "sienna"))
+                                                  "above-align(x-right, ellipse(70, 20, solid, gold),
+            above-align(x-right, ellipse(50, 20, solid, goldenrod), 
+            above-align(x-right, ellipse(30, 20, solid, darkgoldenrod), 
+            ellipse(10, 20, solid, sienna))))"
+                                                  "above-align(x-left, ellipse(70, 20, solid, yellowgreen),
+            above-align(x-left, ellipse(50, 20, solid, olivedrab), 
+            above-align(x-left, ellipse(30, 20, solid, darkolivegreen), 
+            ellipse(10, 20, solid, darkgreen))))"]}
+
+@function["above-align-list"]{Similar to @pyret{above-align}, except that it accepts a nonempty list of images.
+                                         
+                              @image-examples[#:racket (above/align "right"
+                                                                    (ellipse 70 20 "solid" "gold")
+                                                                    (ellipse 50 20 "solid" "goldenrod")
+                                                                    (ellipse 30 20 "solid" "darkgoldenrod")
+                                                                    (ellipse 10 20 "solid" "sienna"))
+                                                       "above-align-list(x-right, [list: ellipse(70, 20, solid, gold),
+                                 ellipse(50, 20, solid, goldenrod),
+                                 ellipse(30, 20, solid, darkgoldenrod),
+                                 ellipse(10, 20, solid, sienna)])"]}
+
+@section["Placing Images"]
+
+@function["place-image"]{Places @pyret{image} onto @pyret{scene} with its center at the coordinates (x,y) 
+                         and crops the resulting image so that it has the same size as @pyret{scene}. The 
+                         coordinates are relative to the top-left of @pyret{scene}.
+                         
+                         @image-examples[#:racket (place-image (triangle 32 "solid" "red")
+                                                               24 24
+                                                               (rectangle 48 48 "solid" "gray"))
+                                                  "place-image(triangle(32, solid, red), 24, 24, rectangle(48, 48, solid, gray))"
+                                                  "place-image(triangle(64, solid, red), 24, 24, rectangle(48, 48, solid, gray))"
+                                                  "place-image(circle(4, solid, white), 18, 20,
+            place-image(circle(4, solid, white), 0, 6,
+            place-image(circle(4, solid, white), 14, 2,
+            place-image(circle(4, solid, white), 8, 14,
+            rectangle(24, 24, solid, goldenrod)))))"]}
+
+@function["place-image-align"]{Like @pyret{place-image}, but uses @pyret{image}’s @pyret{x-place} and @pyret{y-place} 
+                               to anchor the image. Also, like @pyret{place-image}, @pyret{place-image-align} crops 
+                               the resulting image so that it has the same size as @pyret{scene}.
+                               
+                               @image-examples[#:racket (place-image/align (triangle 48 "solid" "yellowgreen")
+                                                                           64 64 "right" "bottom"
+                                                                           (rectangle 64 64 "solid" "mediumgoldenrod"))
+                                                        "place-image-align(triangle(48, solid, yellowgreen), 64, 64, x-right, y-bottom,
+                  rectangle(64, 64, solid, mediumgoldenrod))"
+                                                        "beside-list([list: place-image-align(circle(8, solid, tomato), 0, 0, 
+                     x-center, y-center, rectangle(32, 32, outline, black)),
+                  place-image-align(circle(8, solid, tomato), 8, 8, 
+                     x-center, y-center, rectangle(32, 32, outline, black)),
+                  place-image-align(circle(8, solid, tomato), 16, 16, 
+                     x-center, y-center, rectangle(32, 32, outline, black)),
+                  place-image-align(circle(8, solid, tomato), 24, 24, 
+                     x-center, y-center, rectangle(32, 32, outline, black)),
+                  place-image-align(circle(8, solid, tomato), 32, 32, 
+                     x-center, y-center, rectangle(32, 32, outline, black))])"]}
+
+@function["place-images"]{Places each of @pyret{images} into @pyret{scene} like @pyret{place-image} would, using the
+                          coordinates in @pyret{posns} as the @pyret{x} and @pyret{y} arguments to @pyret{place-image}.
+                          
+                          @image-examples[#:racket (place-images
+                                                    (list (circle 4 "solid" "white")
+                                                          (circle 4 "solid" "white")
+                                                          (circle 4 "solid" "white")
+                                                          (circle 4 "solid" "white"))
+                                                    (list (make-posn 18 20)
+                                                          (make-posn 0 6)
+                                                          (make-posn 14 2)
+                                                          (make-posn 8 14))
+                                                    (rectangle 24 24 "solid" "goldenrod"))
+                                                   "place-images([list: circle(4, solid, white),
+                    circle(4, solid, white),
+                    circle(4, solid, white),
+                    circle(4, solid, white)],
+             [list: posn(18, 20),
+                    posn(0, 6),
+                    posn(14, 2),
+                    posn(8, 14)],
+             rectangle(24, 24, solid, goldenrod))"]}
+
+@function["frame"]{Returns an image just like @pyret{image}, except with a black, 
+                   single pixel frame drawn around the bounding box of the image.
+                   
+                   @image-examples[#:racket (frame (ellipse 40 40 "solid" "gray"))
+                                            "frame(ellipse(40, 40, solid, gray))"
+                                            "beside-list([list: ellipse(20, 70, solid, lightsteelblue),
+                   frame(ellipse(20, 50, solid, mediumslateblue)),
+                   ellipse(20, 30, solid, slateblue),
+                   ellipse(20, 10, solid, navy)])"]}
+
+@section["Image Methods"]
+
+@image-method["flip-horizontal"]{
+
+Flips the image left to right.
+
+@image-examples[#:racket (beside
+                          (rotate 30 (square 50 "solid" "red"))
+                          (flip-horizontal
+                           (rotate 30 (square 50 "solid" "blue"))))
+                         "beside(square(50, solid, red).rotate(30),
+       square(50, solid, blue).rotate(30).flip-horizontal())"]}
+
+@image-method["flip-vertical"]{
+
+Flips the image top to bottom.
+
+@image-examples[#:racket (above
+                          (star 40 "solid" "firebrick")
+                          (scale/xy 1 1/2 (flip-vertical (star 40 "solid" "gray"))))
+                         "above(star(40, solid, firebrick),
+      star(40, solid, gray).flip-vertical().scale-xy(1, 1/2))"]}
+
+@image-method["scale-x"]{
+
+Scales the image by @pyret{x-factor} horizontally.
+
+(This method is equivalent to @pyret{image.scale-xy(x-factor, 1)})}
+
+@image-method["scale-y"]{
+
+Scales the image by @pyret{y-factor} vertically.
+
+(This method is equivalent to @pyret{image.scale-xy(1, y-factor)})}
+
+@image-method["scale-xy"]{
+
+Scales the image by @pyret{x-factor} horizontally and by
+@pyret{y-factor} vertically.
+
+@image-examples[#:racket (scale/xy 3 2 (ellipse 20 30 "solid" "blue"))
+                         "ellipse(20, 30, solid, blue).scale-xy(3, 2)"
+                         "ellipse(60, 60, solid, blue)"]}
+
+@image-method["scale"]{
+
+Scales the image by @pyret{factor}.
+
+@image-examples[#:racket (scale 2 (ellipse 20 30 "solid" "blue"))
+                         "ellipse(20, 30, solid, blue).scale(2)"
+                         "ellipse(40, 60, solid, blue)"]}
+
+@image-method["rotate"]{
+
+Rotates the image by the given @pyret{theta} degrees counterclockwise.
+
+@image-examples[#:racket (rotate 45 (ellipse 60 20 "solid" "olivedrab"))
+                         "ellipse(60, 20, solid, olivedrab).rotate(45)"
+                         "rectangle(50, 50, outline, black).rotate(5)"
+                         "beside-align(y-center, rectangle(40, 20, solid, darkseagreen),
+             rectangle(20, 100, solid, darkseagreen)).rotate(45)"]}
+
+@image-method["crop"]{
+
+Crops the image to the rectangle with the upper left point at
+(@pyret{x}, @pyret{y}) and with @pyret{width} and @pyret{height}.
+
+@image-examples[#:racket (crop 0 0 40 40 (circle 40 "solid" "chocolate"))
+                         "circle(40, solid, chocolate).crop(0, 0, 40, 40)"
+                         "ellipse(80, 120, solid, dodgerblue).crop(40, 60, 40, 60)"
+                         "above(beside(circle(40, solid, palevioletred).crop(40, 40, 40, 40),
+             circle(40, solid, lightcoral).crop(0, 40, 40, 40)),
+      beside(circle(40, solid, lightcoral).crop(40, 0, 40, 40),
+             circle(40, solid, palevioletred).crop(0, 0, 40, 40)))"]}
+
+@image-method["crop-align"]{
+
+Crops the image to a rectangle whose size is @pyret{width} and @pyret{height} and is positioned
+based on @pyret{x-place} and @pyret{y-place}.
+
+@image-examples[#:racket (crop/align "left" "top" 40 40 (circle 40 "solid" "chocolate"))
+                         "circle(40, solid, chocolate).crop-align(x-left, y-top, 40, 40)"
+                         "ellipse(80, 120, solid, dodgerblue).crop-align(x-right, y-bottom, 40, 60)"
+                         "circle(25, solid, mediumslateblue).crop-align(x-center, y-center, 50, 30)"
+                         "above(beside(circle(40, solid, palevioletred).crop-align(x-right, y-bottom, 40, 40),
+             circle(40, solid, lightcoral).crop-align(x-left, y-bottom, 40, 40)),
+      beside(circle(40, solid, lightcoral).crop-align(x-right, y-top, 40, 40),
+             circle(40, solid, palevioletred).crop-align(x-left, y-top, 40, 40)))"]}
+
+@image-method["width"]{
+
+Returns the width of the image.
+
+@examples{
+check:
+  ellipse(30, 40, solid, orange).width() is 30
+  circle(30, solid, orange).width() is 60
+  beside(circle(20, solid, orange), circle(20, solid, purple)).width() is 80
+  rectangle(0, 10, solid, purple).width() is 0
+end}}
+
+@image-method["height"]{
+
+Returns the height of the image.
+
+@examples{
+check:
+  ellipse(30, 40, solid, orange).height() is 40
+  circle(30, solid, orange).height() is 60
+  overlay(circle(20, solid, orange), circle(30, solid, purple)).height() is 60
+  rectangle(10, 0, solid, purple).height() is 0
+end}}
 
 }

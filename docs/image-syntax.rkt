@@ -4,6 +4,7 @@
                      scribble/core
                      scribble/html-properties
                      racket/base
+                     racket/string
                      racket/match
                      (prefix-in xml: xml)
                      "image-helpers.rkt")
@@ -106,21 +107,22 @@
 
 ;; Creates one example
 (define-for-syntax (make-image-example racket pyret-str pyret-img)
-  (define equiv-str
+  #;(define equiv-str
     (quasisyntax/loc racket
-      #,(string-append "# Racket Equivalent: " (stringify racket))))
+      #,(racket-comment racket)))
+  (with-syntax ([equiv-str (pyret-example (string-join (racket-comment (syntax->datum racket)) "\n"))])
   (define spaced-pyret-img
     (quasisyntax/loc racket
       (element #f (list (hspace 4) #,pyret-img))))
   (if (syntax->datum racket) ;; racket != #f
       (quasisyntax/loc racket
-        (element #f (list #,(pyret-example equiv-str)
+        (element #f (list equiv-str
                           #,(pyret-example pyret-str)
                           #,spaced-pyret-img)))
       (if pyret-img
           #`(element #f (list #,(pyret-example pyret-str)
                               #,spaced-pyret-img))
-          #`(element #f #,(pyret-example pyret-str)))))
+          #`(element #f #,(pyret-example pyret-str))))))
 
 (define-for-syntax (normalize sym)
   (string->symbol (format "~a" sym)))
@@ -164,7 +166,11 @@
                (cons (cons plac (syntax->datum #'frst.pyret)) acc)))]
     [else (raise-syntax-error #f "Invalid example" stx)]))
 
-
+(define-for-syntax tick-mod
+  (let ()
+    (define count 0)
+    (λ()(begin0 (equal? count 0)
+                (set! count (modulo (add1 count) 30))))))
 (define-for-syntax (get-placeholders stx (acc '()))
   ;; Kept for posterity
   #|(syntax-parse stx
@@ -184,11 +190,15 @@
      (let-values (((rst acc) (get-placeholders #'(rst ...) acc)))
        (values (cons #'head rst) acc))]
     [other (values #'other acc)])|#
-  
   (cond [(not (stx-pair? stx)) (values stx acc)]
         [(image-examples? (stx-car stx))
+         ;; DO NOT REMOVE
+         ;; Why is this needed? Who knows. Scribble segfaults without this fprintf.
+         (fprintf (open-output-string 'junk) "~a~n" (map syntax->datum (stx-cdr (stx-car stx))))
+         (if (tick-mod) (eprintf ".") (void))
          (let-values (((rst acc) (get-placeholders (stx-cdr stx) acc))
                       ((fst facc) (image-examples->placeholders (stx-cdr (stx-car stx)))))
+           
            (values
             (cons (cons #'image-examples fst) rst)
             (append facc acc)))]
