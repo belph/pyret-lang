@@ -190,7 +190,7 @@ provide {
   triangle-asa : triangle-asa,
   triangle-saa : triangle-saa,
   square : square,
-  rectangle : rectangle,
+  rectangle : make-rectangle,
   rhombus : rhombus,
   star : star,
   radial-star : radial-star,
@@ -224,7 +224,8 @@ provide {
   place-images : place-images,
   place-image-align : place-image-align,
   frame : frame,
-  draw-svg : draw-svg
+  draw-svg : draw-svg,
+  text: text
 } end
 provide-types *
 
@@ -248,6 +249,7 @@ import image_datatypes as IM_D
 import image_auxiliary_datatypes as IM_AUX_DATA
 import image_matrix_helpers as IM_MTX
 import Equal, NotEqual from equality
+import image-dom as DOM
 
 
 pi = 2 * num-asin(1)
@@ -482,7 +484,16 @@ cornerbox = IM_MTX.cornerbox
 bez-corner-box = IM_MTX.bez-corner-box
 poly-corner-box = IM_MTX.poly-corner-box
 
-  
+fun reorder-step(lst :: List, step :: Number%(nonzero-nat)):
+  doc: "Reorders the given list using the given step size"
+  len = lst.length()
+  new-idx = lam(i): num-modulo(i * step, len) end
+  var ret-lst = empty
+  for each(i from range(1, len + 1).reverse()):
+    ret-lst := link(lst.get(new-idx(len - i)), ret-lst)
+  end
+  ret-lst
+end
 
 # Transformation Matrices Definitions
 
@@ -514,9 +525,9 @@ fun scale-matrix(k :: Number) -> M.Matrix:
 end
 
 
-flip-horiz-matrix = [matrix(2,2): 1, 0, 0, -1]
+flip-horiz-matrix = [matrix(2,2): -1, 0, 0, 1]
 
-flip-vert-matrix = [matrix(2,2): -1, 0, 0, 1]
+flip-vert-matrix = [matrix(2,2): 1, 0, 0, -1]
 
 #Datatype helpers
 
@@ -571,6 +582,17 @@ fun clip-box(i1 :: Image, x :: Number, y :: Number, i2 :: Image, i1-pinhole :: P
   box(box-x,box-y)
 end
 
+# Needed inside of the data definition, so placing here
+# with polygon-maker parameter subverts scoping problems
+fun rectangle(polygon-maker,
+              width  :: Number%(greater-than-zero),
+              height :: Number%(greater-than-zero),
+              mode   :: Mode,
+              color  :: Color) :
+  polygon-maker([matrix(2,4):  0, 0, width, width,
+      0, height, height, 0], mode, color, posn((width / 2), (height / 2))).snap-axes()
+end
+
 
   
 
@@ -597,7 +619,11 @@ data Image:
   | text(string :: String,
          size   :: Number%(greater-than-zero),
          color  :: Color,
-      center   :: Position)
+      center   :: Position) with:
+      cornerbox(self):
+        DOM.text-svg-bounding-box(self.string, "font-size:" + num-tostring(self.size) + "px;",
+            self.center.x, self.center.y, "")
+      end
     
   # text-font()
   # Represents the given string
@@ -987,7 +1013,7 @@ sharing:
     doc: "Crops the image to a rectangle of the given width and height and its top-left corner at the given (x,y) position"
     self-bb = self.get-box()
     at = posn((self-bb.width / 2) - x, (self-bb.height / 2) - y)
-    clipped-image(compound-image(self,at, rectangle(width,height,outline,black),posn((width / 2), (height / 2))),true)
+    clipped-image(compound-image(self,at, rectangle(polygon, width,height,outline,black),posn((width / 2), (height / 2))),true)
   end,
   crop-align(self, xp :: X-Place, yp :: Y-Place, width :: Number, height :: Number):
     doc: "Crops the image to a rectangle of the given width and height placed at the given alignment"
@@ -1001,7 +1027,7 @@ sharing:
         | y-center => (height / 2)
         | y-bottom => (height) - (self-bb.height / 2)
       end)
-    clipped-image(compound-image(self, at, rectangle(width,height,outline,black),posn(width / 2, height / 2)), true)
+    clipped-image(compound-image(self, at, rectangle(polygon, width,height,outline,black),posn(width / 2, height / 2)), true)
   end,
   width(self) -> Number:
     doc: "Returns the image's width"
@@ -1105,6 +1131,124 @@ fun make-text-font(string      :: String,
     font-family, style, weight, 
     underline, posn(0,0))
 end
+
+# 
+# Helper functions (ported from Racket)
+# (Put in an object for organization)
+#
+
+helpers = {
+  excess : lam(a :: Number%(greater-than-zero), b :: Number%(greater-than-zero), c :: Number%(greater-than-zero)): 
+    (num-sqr(a) + num-sqr(b)) - num-sqr(c) end,
+  polar-to-posn : lam(radius :: Number%(greater-than-zero), angle :: Number): 
+    posn(radius * num-cos(angle), radius * num-sin(angle)) end,
+  cos-rel : lam(a :: Number, b :: Number, C :: Number):
+    (num-sqr(a) + num-sqr(b)) - (2 * a * b * num-cos(C)) end,
+  sin-rel : lam(A :: Number, a :: Number, B :: Number):
+    ((a * num-sin(B)) / num-sin(A)) end,
+  last-angle : lam(A :: Number, B :: Number):
+    ((pi - A) - B) end,
+  radians : lam(degree :: Number):
+    ((degree / 180.0) * pi) end
+}
+
+fun regular-polygon-points(side-length, side-count):
+  doc: "Returns a list of vertices for a regular polygon"
+  fun add-polar(p :: Position, rad, angle):
+    from-polar = helpers.polar-to-posn(rad, angle)
+    posn(p.x + from-polar.x, p.y + from-polar.y)
+  end
+  var ret-lst = empty
+  var p = posn(0,0)
+  for each(i from range(1, side-count + 1).reverse()):
+    ret-lst := link(p, ret-lst)
+    p := add-polar(p, side-length, (-2 * pi * ((side-count - i) / side-count)))
+  end
+  ret-lst
+end
+
+fun star-points(in-small-rad, in-large-rad, points):
+  small-rad = in-small-rad - 1
+  large-rad = in-large-rad - 1
+  roff = num-floor(large-rad / 2)
+  var ret-lst = empty
+  for each(i from range(1, points + 1)):
+    this-p = i - 1
+    theta1 = 2 * pi * (this-p / points)
+    theta2 = 2 * pi * ((this-p - 1/2) / points)
+    raw-p1 = helpers.polar-to-posn(small-rad, theta1)
+    raw-p2 = helpers.polar-to-posn(large-rad, theta2)
+    ret-lst := link(posn(large-rad + raw-p1.x, large-rad + raw-p1.y), 
+                    link(posn(large-rad + raw-p2.x, large-rad + raw-p2.y), ret-lst))
+  end
+  ret-lst
+end
+
+#
+# Vertex-creating functions (ported from Racket)
+# (Put in an object for organization)
+#
+
+vertices = {
+  triangle-sss : 
+    lam(a, b, c):
+      A = num-acos(helpers.excess(b, c, a) / (2 * b * c))
+      [list: posn(0, 0), posn(c, 0), helpers.polar-to-posn(b, A)]
+    end,
+  triangle-ass :
+    lam(A, b, c):
+      [list: posn(0, 0), posn(c, 0), helpers.polar-to-posn(b, A)]
+    end,
+  triangle-sas :
+    lam(a, B, c):
+      b-sq = helpers.cos-rel(a, c, B)
+      b = num-sqrt(b-sq)
+      A = num-acos(helpers.excess(b, c, a) / (2 * b * c))
+      [list: posn(0, 0), posn(c, 0), helpers.polar-to-posn(b, A)]
+    end,
+  triangle-ssa :
+    lam(a, b, C):
+      c-sq = helpers.cos-rel(a, b, C)
+      c = num-sqrt(c-sq)
+      A = num-acos(helpers.excess(b, c, a) / (2 * b * c))
+      [list: posn(0, 0), posn(c, 0), helpers.polar-to-posn(b, A)]
+    end,
+  triangle-aas :
+    lam(A, B, c):
+      C = helpers.last-angle(A, B)
+      b = helpers.sin-rel(C, c, B)
+      [list: posn(0, 0), posn(c, 0), helpers.polar-to-posn(b, A)]
+    end,
+  triangle-asa :
+    lam(A, b, C):
+      B = helpers.last-angle(A, C)
+      c = helpers.sin-rel(B, b, C)
+      [list: posn(0, 0), posn(c, 0), helpers.polar-to-posn(b, A)]
+    end,
+  triangle-saa :
+    lam(a, B, C):
+      A = helpers.last-angle(B, C)
+      b = helpers.sin-rel(A, a, B)
+      c = helpers.sin-rel(A, a, C)
+      [list: posn(0, 0), posn(c, 0), helpers.polar-to-posn(b, A)]
+    end
+}
+
+fun make-polygon(shadow vertices :: List<Position>, mode :: Mode, color :: Color) :
+  doc: "Creates a polygon with the given vertices, mode, and color"
+  # Use an object to simulate a (values ...) expression
+  add-point = lam(p :: Position, o :: Object): { x-list : link(p.x, o.x-list), y-list: link(p.y, o.y-list) } end
+  lsts = vertices.foldr(add-point, { x-list : empty, y-list : empty })
+  poly-matrix = M.lists-to-matrix([list: lsts.x-list, lsts.y-list])
+  poly-box = poly-corner-box([list: lsts.x-list, lsts.y-list])
+  polygon(poly-matrix, mode, color, poly-box.get-center()).snap-axes()
+end
+
+fun make-polygon-star(side-length, side-count, mode, color, adjust):
+  make-polygon(adjust(regular-polygon-points(side-length, side-count)), mode, color)
+end
+    
+
 # triangle()
 # Represents an upward-pointing
 #   equilateral triangle
@@ -1123,8 +1267,7 @@ fun right-triangle(side-length1 :: Number%(greater-than-zero),
     side-length2 :: Number%(greater-than-zero),
     mode         :: Mode,
     color        :: Color) :
-  polygon([matrix(2,3): 0, side-length1, 0,
-         0, 0, side-length2], mode, color, posn(side-length1 / 2, side-length2 / 2)).snap-axes()
+  make-polygon([list: posn(0, (-1 * side-length2)), posn(0, 0), posn(side-length1, 0)], mode, color)
 end
 # isosceles-triangle()
 # Represents an isosceles triangle,
@@ -1136,8 +1279,14 @@ fun isosceles-triangle(side-length :: Number%(greater-than-zero),
     angle-c     :: Number, # Degrees
     mode        :: Mode,
     color       :: Color) :
-  r-ang = to-radians(angle-c)
-  polygon([matrix(2,3):  0, (2 * (side-length * num-sin(angle-c / 2))), (side-length * num-sin(angle-c / 2)), (side-length * num-cos(angle-c / 2)), (side-length * num-cos(angle-c / 2)), 0], mode, color, posn(side-length * num-sin(r-ang / 2), side-length * num-cos(r-ang / 2))).snap-axes()
+  offset = (helpers.radians(angle-c) / 2)
+  shadow vertices = [list: posn(0, 0), 
+                           helpers.polar-to-posn(side-length, (pi / 2) + offset), 
+                           helpers.polar-to-posn(side-length, (pi / 2) - offset)]
+  make-polygon(vertices, mode, color)
+  
+  #r-ang = to-radians(angle-c)
+  #polygon([matrix(2,3):  0, (2 * (side-length * num-sin(angle-c / 2))), (side-length * num-sin(angle-c / 2)), (side-length * num-cos(angle-c / 2)), (side-length * num-cos(angle-c / 2)), 0], mode, color, posn(side-length * num-sin(r-ang / 2), side-length * num-cos(r-ang / 2))).snap-axes()
 end
 # triangle-sss()
 # Represents a triangle with the
@@ -1147,16 +1296,7 @@ fun triangle-sss(side-a :: Number%(greater-than-zero),
     side-c :: Number%(greater-than-zero),
     mode   :: Mode,
     color  :: Color) :
-  acos = ((num-sqr(side-a) - (num-sqr(side-b) - num-sqr(side-c))) / (2 * (side-a * side-c)))
-  ask:
-    | (side-a > side-b) and (side-a > side-c) then:
-      acosang = (((num-sqr(side-a) - num-sqr(side-b)) + num-sqr(side-c)) / 
-        (2 * (side-a * side-c)))
-      polygon([matrix(2,3): 0, acosang, acosang - side-c,
-          side-a * num-sin(num-acos(acosang)), 0, 0], mode, color, posn(1/2 * acos, (side-a / 2) * num-sin(num-acos(acos)))).snap-axes()
-    | otherwise:
-      polygon([matrix(2,3): 0, side-c * ((((-1 * num-sqr(side-a)) + num-sqr(side-b)) + num-sqr(side-c)) / (2 * (side-b * side-c))), side-c, 0, side-a * num-sin(num-acos((((-1 * num-sqr(side-a)) + num-sqr(side-b)) + num-sqr(side-c)) / (2 * (side-b * side-c)))), 0], mode, color, posn(1/2 * side-c, (side-a / 2) * num-sin(num-acos(acos)))).snap-axes()
-  end
+  make-polygon(vertices.triangle-sss(side-a, side-b, side-c), mode, color)
 end
 # triangle-ass()
 # Represents a triangle with the
@@ -1166,107 +1306,58 @@ fun triangle-ass(angle-a :: Number, # Degrees
     side-c  :: Number%(greater-than-zero),
     mode    :: Mode,
     color   :: Color) :
-  rad-angle-a = to-radians(angle-a)
-  ask:
-    | angle-a < (pi / 2) then:
-      polygon([matrix(2,3): 0, side-c, side-b * num-cos(rad-angle-a),
-          0, 0, side-b * num-sin(rad-angle-a)], mode, color, posn(side-c / 2, (side-b * num-sin(rad-angle-a)) / 2)).snap-axes()
-    | otherwise:
-      polygon([matrix(2,3): num-abs(side-b * num-cos(rad-angle-a)), 0, num-abs(side-b * num-cos(rad-angle-a)) + side-c, 0, side-b * num-cos(rad-angle-a), 0], mode,color,  posn((num-abs(side-b * num-cos(rad-angle-a)) + side-c) / 2, (side-b * num-sin(rad-angle-a)) / 2)).snap-axes()
-  end
+  
+  make-polygon(vertices.triangle-ass(helpers.radians(angle-a), side-b, side-c), mode, color)
 end
 # triangle-sas()
 # Represents a triangle with the
 #   given angle and two sides.(S-A-S)
 fun triangle-sas(side-a  :: Number%(greater-than-zero),
-    deg-angle-b :: Number, # Degrees
+    angle-b :: Number, # Degrees
     side-c  :: Number%(greater-than-zero),
     mode    :: Mode,
     color   :: Color) :
-  angle-b = to-radians(deg-angle-b)
-  polygon([matrix(2,3): 0, side-c, side-c - (side-a * num-cos(angle-b)),
-         0, 0, side-a * num-sin(angle-b)],mode,color,posn(side-c / 2, (side-a * num-sin(angle-b)) / 2)).snap-axes()
+  make-polygon(vertices.triangle-sas(side-a, helpers.radians(angle-b), side-c), mode, color)
 end
 # triangle-ssa()
 # Represents a triangle with the
 #   given angle and two sides.(S-S-A)
 fun triangle-ssa(side-a  :: Number%(greater-than-zero),
     side-b  :: Number%(greater-than-zero),
-    deg-angle-c :: Number, # Degrees
+    angle-c :: Number, # Degrees
     mode    :: Mode,
     color   :: Color) :
-  angle-c = to-radians(deg-angle-c)
-  side-c = num-sqrt((num-sqr(side-a) + num-sqr(side-b)) - (2 * (side-a * (side-b * num-cos(angle-c)))))
-   polygon([matrix(2,3): 0, side-c, side-b * num-cos(num-asin((side-a * num-sin(angle-c)) / side-c)),  0, 0, ((side-a * (side-b * num-sin(angle-c))) / side-c)], mode, color, posn(side-c / 2, ((side-a * (side-b * num-sin(angle-c))) / side-c))).snap-axes()
+  make-polygon(vertices.triangle-ssa(side-a, side-b, helpers.radians(angle-c)), mode, color)
 end
 # triangle-aas()
 # Represents a triangle with the
 #   given angle and two sides.(A-A-S)
-fun triangle-aas(deg-angle-a :: Number, # Degrees
-    deg-angle-b :: Number, # Degrees
+fun triangle-aas(angle-a :: Number, # Degrees
+    angle-b :: Number, # Degrees
     side-c  :: Number%(greater-than-zero),
     mode    :: Mode,
     color   :: Color) :
-  angle-a = to-radians(deg-angle-a)
-  angle-b = to-radians(deg-angle-b)
-  csb = side-c * num-sin(angle-b)
-  sinc = num-sin(pi - (angle-a + angle-b))
-  ask:
-    | angle-a <= (pi / 2) then:
-      mtx = [matrix(2,3): 0, side-c, (csb / sinc) * num-cos(angle-a),
-        0, 0, (csb / sinc) * num-sin(angle-a)]
-      polygon(mtx, mode, color, mtx-center(mtx)).snap-axes()
-    | otherwise:
-      mtx = [matrix(2,3): num-abs((csb / sinc) * num-cos(angle-a)), 0, num-abs((csb / sinc) * num-cos(angle-a)) + side-c,
-        0, (csb / sinc) * num-sin(angle-a), 0]
-      polygon(mtx, mode, color, mtx-center(mtx)).snap-axes()
-  end
+  make-polygon(vertices.triangle-aas(helpers.radians(angle-a), helpers.radians(angle-b), side-c), mode, color)
 end
   # triangle-asa()
   # Represents a triangle with the
   #   given angle and two sides.(A-S-A)
-fun triangle-asa(deg-angle-a :: Number, # Degrees
+fun triangle-asa(angle-a :: Number, # Degrees
                  side-b  :: Number%(greater-than-zero),
-                 deg-angle-c :: Number, # Degrees
+                 angle-c :: Number, # Degrees
                  mode    :: Mode,
                  color   :: Color):
-  angle-a = to-radians(deg-angle-a)
-  angle-c = to-radians(deg-angle-c)
-  bsc = side-b * num-sin(angle-c)
-  sinb = num-sin(pi - (angle-a + angle-c))
-  ask:
-    | angle-a <= (pi / 2) then:
-      mtx = [matrix(2,3): 0, (bsc / sinb), side-b * num-cos(angle-a),
-        0, 0, side-b * num-sin(angle-a)]
-      polygon(mtx, mode, color, mtx-center(mtx)).snap-axes()
-    | otherwise:
-      mtx = [matrix(2,3): num-abs(side-b * num-cos(angle-a)), 0, num-abs(side-b * num-cos(angle-a)) + (bsc / sinb),
-        0, side-b * num-sin(angle-a), 0]
-      polygon(mtx, mode, color, mtx-center(mtx)).snap-axes()
-  end
+  make-polygon(vertices.triangle-asa(helpers.radians(angle-a), side-b, helpers.radians(angle-c)), mode, color)
 end
   # triangle-saa()
   # Represents a triangle with the
   #   given angle and two sides.(S-A-A)
 fun triangle-saa(side-a  :: Number%(greater-than-zero),
-                 deg-angle-b :: Number, # Degrees
-                 deg-angle-c :: Number, # Degrees
+                 angle-b :: Number, # Degrees
+                 angle-c :: Number, # Degrees
                  mode    :: Mode,
                  color   :: Color) :
-  angle-b = to-radians(deg-angle-b)
-  angle-c = to-radians(deg-angle-c)
-  ang-a = pi - (angle-b + angle-c)
-  asc = side-a * num-sin(angle-c)
-  ask:
-    | (angle-b + angle-c) >= (pi / 2) then:
-      mtx = [matrix(2,3):  0, 0, side-a * num-cos(ang-a),
-        0, (asc / num-sin(ang-a)), side-a * num-sin(ang-a)]
-      polygon(mtx, mode, color, mtx-center(mtx)).snap-axes()
-    | otherwise:
-      mtx = [matrix(2,3): num-abs(side-a * num-cos(ang-a)), 0, num-abs(side-a * num-cos(ang-a)) + (asc / num-sin(ang-a)),
-        0, side-a * num-sin(ang-a), 0]
-      polygon(mtx, mode, color, mtx-center(mtx)).snap-axes()
-  end
+  make-polygon(vertices.triangle-saa(side-a, helpers.radians(angle-b), helpers.radians(angle-c)), mode, color)
 end
   # square()
   # Represents a square of the given side length
@@ -1279,12 +1370,11 @@ end
   # rectangle()
   # Represents a rectangle with the
   #   given two side lengths
-fun rectangle(width  :: Number%(greater-than-zero),
+fun make-rectangle(width  :: Number%(greater-than-zero),
               height :: Number%(greater-than-zero),
               mode   :: Mode,
               color  :: Color) :
-  polygon([matrix(2,4):  0, 0, width, width,
-      0, height, height, 0], mode, color, posn((width / 2), (height / 2))).snap-axes()
+  rectangle(polygon, width, height, mode, color)
 end
   # rhombus()
   # Represents a rhombus with the given
@@ -1304,16 +1394,7 @@ end
 fun star(side-length :: Number%(greater-than-zero),
          mode        :: Mode,
          color       :: Color) :
-  a = pi / 5
-  rmax = (2 * (side-length * num-cos(a)))
-  rmin = rmax - (1.7 * side-length * num-sin(a))
-  i-list = range(2,10).filter(lam(n):num-modulo(n,2) == 0 end)
-  pairs = fold(lam(r,i): 
-      r.push([list: ((rmax * num-cos(i * a)) + rmax), ((rmax * num-sin(i * a)) + rmax)]).push(
-        [list: ((rmin * num-cos((i + 1) * a)) + rmax), ((rmin * num-sin((i + 1) * a)) + rmax)])
-    end, [list: [list: ((rmin * num-cos(a)) + rmax), ((rmin * num-sin(a)) + rmax)], [list: 2 * rmax, rmax]], i-list)
-  mtx = M.lists-to-matrix(pairs).transpose()
-  polygon(mtx, mode, color, mtx-center(mtx)).snap-axes()
+  make-polygon-star(side-length, 5, mode, color, lam(l): reorder-step(l, 2) end)
 end
       
   # radial-star()
@@ -1327,14 +1408,7 @@ fun radial-star(point-count :: Number%(nonzero-nat),
                 inner       :: Number%(greater-than-zero),
                 mode        :: Mode,
                 color       :: Color) :
-  a = pi / point-count
-      i-list = range(2,(2 * point-count)).filter(lam(n):num-modulo(n,2) == 0 end)
-      pairs = fold(lam(r,i): 
-          r.push([list: ((outer * num-cos(i * a)) + outer), ((outer * num-sin(i * a)) + outer)]).push(
-            [list: ((inner * num-cos((i + 1) * a)) + outer), ((inner * num-sin((i + 1) * a)) + outer)])
-        end, [list: [list: ((inner * num-cos(a)) + outer), ((inner * num-sin(a)) + outer)], [list: 2 * outer, outer]], i-list)
-  mtx = M.lists-to-matrix(pairs).transpose()
-  polygon(mtx, mode, color, mtx-center(mtx)).snap-axes()
+  make-polygon(star-points(outer, inner, point-count), mode, color)
 end
   # star-sized()
   # Same as radial-star().
@@ -1353,16 +1427,7 @@ fun star-polygon(side-length :: Number%(greater-than-zero),
                  step        :: Number%(nonzero-nat),
                  mode        :: Mode,
                  color       :: Color) :
-  a = pi / point-count
-  rmax = (2 * (side-length * num-cos(a)))
-  rmin = rmax - (side-length * num-sin(a))
-  i-list = range(2,(2 * point-count)).filter(lam(n):num-modulo(n,2) == 0 end)
-  pairs = fold(lam(r,i): 
-      r.push([list: ((rmax * num-cos(i * a)) + rmax), ((rmax * num-sin(i * a)) + rmax)]).push(
-        [list: ((rmin * num-cos((i + 1) * a)) + rmax), ((rmin * num-sin((i + 1) * a)) + rmax)])
-    end, [list: [list: ((rmin * num-cos(a)) + rmax), ((rmin * num-sin(a)) + rmax)], [list: 2 * rmax, rmax]], i-list)
-  mtx = M.lists-to-matrix(pairs).transpose()
-  polygon(mtx, mode, color, mtx-center(mtx)).snap-axes()
+  make-polygon-star(side-length, point-count, mode, color, lam(l): reorder-step(l, step) end)
 end
   # regular-polygon()
   # Represents a regular polygon
@@ -1371,21 +1436,14 @@ fun regular-polygon(length :: Number%(greater-than-zero),
                     count  :: Number%(nonzero-nat),
                     mode   :: Mode,
                     color  :: Color) :
-  a = (2 * pi) / count
-  r = length / (2 * num-sin(a))
-  i-list = range(1,count)
-  pairs = fold(lam(rst,i): 
-      rst.push([list: ((r * num-cos(i * a)) + r), ((r * num-sin(i * a)) + r)])
-    end, [list: [list: 2 * r, r]], i-list)
-  mtx = M.lists-to-matrix(pairs).transpose()
-  polygon(mtx, mode, color, mtx-center(mtx)).snap-axes()
+  make-polygon-star(length, count, mode, color, lam(x): x end)
 end
   # empty-image()
   # Represents an empty image
   #   of the given size.
 fun empty-image(x :: Number%(greater-than-zero),
                 y :: Number%(greater-than-zero)) :
-  rectangle(x,y,outline,black)
+  make-rectangle(x,y,outline,black)
 end
 
 
@@ -1749,13 +1807,13 @@ end
 
 fun empty-scene(x :: Number%(greater-than-zero),
                 y :: Number%(greater-than-zero)) :
-  overlay(rectangle(x,y,outline,black), rectangle(x,y,solid,white))
+  overlay(make-rectangle(x,y,outline,black), make-rectangle(x,y,solid,white))
 end
 
 fun colored-empty-scene(x :: Number%(greater-than-zero),
                 y :: Number%(greater-than-zero),
                 k :: Color) :
-  overlay(rectangle(x,y,outline,black), rectangle(x,y,solid,k))
+  overlay(make-rectangle(x,y,outline,black), make-rectangle(x,y,solid,k))
 end
 
 fun place-image(i1 :: Image, x :: Number, y :: Number, i2 :: Image) -> Image:
@@ -1806,7 +1864,7 @@ end
 fun frame(i :: Image) -> Image:
   doc: "Returns the given image with a black frame around it"
   bb = i.get-box()
-  overlay(rectangle(bb.width, bb.height, outline, black), i)
+  overlay(make-rectangle(bb.width, bb.height, outline, black), i)
 end
 
 

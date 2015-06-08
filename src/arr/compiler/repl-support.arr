@@ -41,6 +41,7 @@ end
 ok-imports = [list:
   "world",
   "image",
+  "image-dom",
   "image-structs",
   "string-dict",
   "checkers",

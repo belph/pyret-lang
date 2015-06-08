@@ -499,6 +499,9 @@ bootstrap-builtins = compile-env(
   "image-height",
   "image-baseline",
   "name-to-color",
+  
+  # from js/trove/image-dom.js
+  "text-svg-bounding-box",
 
   # from js/trove/world.js
   "big-bang",
