@@ -29,7 +29,7 @@
          process-examples
          prettify/pyret)
 
-(define DEBUG-IMAGES #f)
+(define DEBUG-IMAGES #t)
 
 ;; Path to phase 1 main-wrapper.js
 (define-runtime-path pyret-compiler
@@ -99,7 +99,7 @@
                     (if DEBUG-IMAGES
                         " . ' + torepr(draw-debug("
                         " . ' + torepr(draw-svg(")
-                    (fix-spacing exmp)
+                    (fixup-str exmp #f)
                     ").tosource()) + ')')")]))
 
 (define (prep-pyret-file-contents examples)
@@ -173,7 +173,7 @@
       (let ((bestline (get-best-line lineno)))
         (format (string-append 
                  "~nRegion of error:~n~a"
-                 "~nHint: It looks like the problem might be with this example: ~n~a~n~n")
+                 "~n~nHint: It looks like the problem might be with this example: ~n~a~n~n")
                 (get-line-range (- lineno 10) (+ lineno 10))
                 (hash-ref examples-in-file bestline))))
     (define (fetch-from-error errmsg)
@@ -228,7 +228,7 @@
   (begin0 (fixup-str (get-output-string prt))
           (close-output-port prt)))
 
-(define (fixup-str s)
+(define (fixup-str s (drop-parens? #t))
   (define FIRSTLASTPAREN #rx"(?:^\\()|(?:\\)$)")
   (define PARENRX #px"\\s*'?\\(")
   (define SINGLECOMMARX #px"\\s*\n\\s*,[ ]*\n")
@@ -236,11 +236,16 @@
   (define (do-replacements s . rpl)
     (if (empty? rpl) s
         (apply do-replacements (regexp-replace* (caar rpl) s (cdar rpl)) (cdr rpl))))
-  (do-replacements s
-                   (cons PARENRX "(")
-                   (cons SINGLECOMMARX ",\n")
-                   (cons SPACECOMMA ",\\1")
-                   (cons FIRSTLASTPAREN "")))
+  (if drop-parens?
+      (do-replacements s
+                       (cons PARENRX "(")
+                       (cons SINGLECOMMARX ",\n")
+                       (cons SPACECOMMA ",\\1")
+                       (cons FIRSTLASTPAREN ""))
+      (do-replacements s
+                       (cons PARENRX "(")
+                       (cons SINGLECOMMARX ",\n")
+                       (cons SPACECOMMA ",\\1"))))
 
 (define (prep-example-string s)
   (define raw-read (read (open-input-string (string-append "(" s ")"))))

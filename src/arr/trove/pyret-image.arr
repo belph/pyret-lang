@@ -593,7 +593,12 @@ fun rectangle(polygon-maker,
       0, height, height, 0], mode, color, posn((width / 2), (height / 2))).snap-axes()
 end
 
-
+fun calc-compound-vector(top-img, bot-img, bot-center, at):
+  basis = bot-img.coord-zero()
+  true-at = posn(at.x + basis.x, at.y + basis.y)
+  tpin = top-img.get-pinhole()
+  [list: true-at.x - tpin.x, true-at.y - tpin.y]
+end
   
 
 # The Image Data Type
@@ -915,7 +920,15 @@ data Image:
     end,
     
     cornerbox(self) -> CornerBox:
-      self.top.cornerbox().join(self.bottom.cornerbox())
+      dvec = calc-compound-vector(self.top, self.bottom, self.bottom.get-pinhole(), self.at)
+      trans-topx-p = dvec.first  >= 0 
+      trans-topy-p = dvec.get(1) >= 0
+      dtx = if trans-topx-p: dvec.first  else: 0 end
+      dty = if trans-topy-p: dvec.get(1) else: 0 end
+      dbx = if trans-topx-p: 0 else: -1 * dvec.first  end
+      dby = if trans-topy-p: 0 else: -1 * dvec.get(1) end
+      trans-box = self.top.cornerbox().translate(dtx, dty)
+      trans-box.join(self.bottom.cornerbox().translate(dbx, dby))
     end
     
     
@@ -926,11 +939,12 @@ data Image:
                             # which the top is clipped to
     with:
     get-box(self):
-      if self.hidden-mask:
-        clip-box(self.pair.top, self.pair.at.x, self.pair.at.y, self.pair.bottom, self.pair.top.center)
-      else:
-        self.pair.bottom.get-box()
-      end
+      self.cornerbox().to-box()
+      #if self.hidden-mask:
+      #  clip-box(self.pair.top, self.pair.at.x, self.pair.at.y, self.pair.bottom, self.pair.top.center)
+      #else:
+      #  self.pair.bottom.get-box()
+      #end
     end,
     
     translate(self, v :: M.Vector) -> Image:
@@ -979,11 +993,21 @@ data Image:
     end,
     
     cornerbox(self) -> CornerBox:
-      if self.hidden-mask:
-        self.pair.top.cornerbox().intersect(self.pair.bottom.cornerbox())
-      else:
-        self.pair.bottom.cornerbox()
-      end
+      self.pair.bottom.cornerbox()
+      # if self.hidden-mask:
+        # dvec = calc-compound-vector(self.pair.top, self.pair.bottom, self.pair.bottom.get-pinhole(), self.pair.at)
+        # #trans-topx-p = dvec.first  >= 0 
+        # #trans-topy-p = dvec.get(1) >= 0
+        # #dtx = if trans-topx-p: dvec.first  else: 0 end
+        # #dty = if trans-topy-p: dvec.get(0) else: 0 end
+        # #dbx = if trans-topx-p: 0 else: -1 * dvec.first  end
+        # #dby = if trans-topy-p: 0 else: -1 * dvec.get(1) end
+        # trans-box = self.pair.top.cornerbox().translate(dvec.first, dvec.get(1))
+        # trans-box.intersect(self.pair.bottom.cornerbox())
+        # #self.pair.top.cornerbox().intersect(self.pair.bottom.cornerbox())
+      # else:
+        # self.pair.bottom.cornerbox()
+      # end
     end
     
 sharing:
@@ -1043,7 +1067,17 @@ sharing:
   end,
   get-center(self) -> Position:
     doc: "Returns the center coordinate of this image"
-	self.cornerbox().get-center()
+    self.cornerbox().get-center()
+  end,
+  get-pinhole(self) -> Position:
+    doc: "Returns the point about which this image is transformed"
+    if (is-clipped-image(self) and self.hidden-mask):
+      self.pair.top.get-pinhole()
+    else if (is-clipped-image(self)):
+      self.pair.get-pinhole()
+    else:
+      self.center
+    end
   end
 #  end,
 #  _torepr(self, shadow torepr):
@@ -1535,7 +1569,6 @@ end
 ##########################
 
 
-
 fun get-bounding-box-mtx(img :: Image) -> M.Matrix:
   doc: "Returns the bounding box's matrix for the given image"
   cases(Image) img:
@@ -1681,7 +1714,6 @@ fun overlay-xy(ri1 :: Image, x :: Number, y :: Number, ri2 :: Image) -> Image:
   i1 = ri1.remove-pinhole()
   i2 = ri2.remove-pinhole()
   tb = i1.get-box()
-  # I never understood why this gets flipped....
   at = posn((tb.width / 2) - x, (tb.height / 2) - y)
   new-c = new-center(i1, at.x, at.y, i2)
   compound-image(i1, at, i2, new-c).snap-axes()
@@ -1728,8 +1760,10 @@ end
 fun beside(ri1 :: Image, ri2 :: Image) -> Image:
   doc: "Places the second image next to the first, with their centers vertically aligned"
   first-is-left = ri1.get-center().x <= ri2.get-center().x
-  i1 = if first-is-left: ri1.remove-pinhole() else: ri2.remove-pinhole() end
-  i2 = if first-is-left: ri2.remove-pinhole() else: ri1.remove-pinhole() end
+  #i1 = if first-is-left: ri1.remove-pinhole() else: ri2.remove-pinhole() end
+  #i2 = if first-is-left: ri2.remove-pinhole() else: ri1.remove-pinhole() end
+  i1 = ri1.remove-pinhole()
+  i2 = ri2.remove-pinhole()
   fb = i1.get-box()
   sb = i2.get-box()
   at = posn(fb.width + (sb.width / 2), i1.get-center().y)
@@ -1769,10 +1803,16 @@ fun above(ri1 :: Image, ri2 :: Image) -> Image:
   doc: "Places the first image above the second, with their centers horizontally aligned"
   i1 = ri1.remove-pinhole()
   i2 = ri2.remove-pinhole()
-  sb = i1.get-box()
-  at = posn(i2.get-center().x, (-1 * (sb.height / 2)))
-  new-c = new-center(i1,at.x,at.y,i2)
-  compound-image(i1,at,i2,new-c).snap-axes()
+  i1cb = i1.cornerbox()
+  i2cb = i2.cornerbox()
+  i1-box = i1cb.to-box()
+  i1-center = i1cb.get-center()
+  i2-box = i2cb.to-box()
+  at-x = i1-center.x
+  at-y = i1-box.height + i2cb.get-center().y
+  at = posn(at-x, at-y)
+  new-c = new-center(i2,at.x,at.y,i1)
+  compound-image(i2,at,i1,new-c).snap-axes()
 end
 
 fun above-list(imgs :: List<Image>) -> Image:
@@ -1785,16 +1825,20 @@ fun above-align(xp :: X-Place, ri1 :: Image, ri2 :: Image) -> Image:
   doc: "Places the first image above the second, with the given horizontal alignment"
   i1 = ri1.remove-pinhole()
   i2 = ri2.remove-pinhole()
-  fb = i2.get-box()
-  sb = i1.get-box()
+  i1cb = i1.cornerbox()
+  i1-box = i1cb.to-box()
+  i1-center = i1cb.get-center()
+  i2cb = i2.cornerbox()
+  i2-box = i2cb.to-box()
+  i2-center = i2cb.get-center()
   xpos = cases(X-Place) xp:
-    | x-left => (sb.width / 2)
-    | x-center => i2.get-center().x
-    | x-right => fb.width - (sb.width / 2)
+    | x-left => i2-center.x
+    | x-center => i1-center.x
+    | x-right => i1-box.width - i2-center.x
   end
-  ypos = (-1 * (sb.height / 2))
-  new-c = new-center(i1,xpos,ypos,i2)
-  compound-image(i1, posn(xpos, ypos), i2, new-c).snap-axes()
+  ypos = i1-box.height + i2-center.y
+  new-c = new-center(i2,xpos,ypos,i1)
+  compound-image(i2, posn(xpos, ypos), i1, new-c).snap-axes()
 end
 
 fun above-align-list(xp :: X-Place, imgs :: List<Image>) -> Image:
@@ -2029,10 +2073,10 @@ fun draw-prerendered-svg(i :: Image, fit-all :: Boolean) -> List<XML.Element>:
       top-basis = top.coord-zero()
       true-at = posn(at.x + basis.x, at.y + basis.y)
       trans-top = if (is-clipped-image(top)): 
-      top.translate([vector: (true-at.x - top.pair.get-center().x), 
-            (true-at.y - top.pair.get-center().y) + dy]) 
-      else: top.translate([vector: (true-at.x - top.get-center().x), 
-            (true-at.y - top.get-center().y) + dy]) 
+      top.translate([vector: (true-at.x - top.pair.get-pinhole().x), 
+            (true-at.y - top.pair.get-pinhole().y) + dy]) 
+      else: top.translate([vector: (true-at.x - top.get-pinhole().x), 
+            (true-at.y - top.get-pinhole().y) + dy]) 
       end
       top-vec = if fit-all: trans-top.snap-vec() else: [vector: 0, 0] end
       top-dx = num-max(0, top-vec.first)
@@ -2047,10 +2091,10 @@ fun draw-prerendered-svg(i :: Image, fit-all :: Boolean) -> List<XML.Element>:
       basis = pair.bottom.coord-zero()
       true-at = posn(pair.at.x + basis.x, pair.at.y + basis.y)
       trans-top = if (is-clipped-image(pair.top)): 
-      pair.top.translate([vector: true-at.x - pair.top.pair.get-center().x, 
-            (true-at.y - pair.top.pair.get-center().y) + dy]) 
-      else: pair.top.translate([vector: true-at.x - pair.top.get-center().x, 
-            (true-at.y - pair.top.get-center().y) + dy]) 
+      pair.top.translate([vector: true-at.x - pair.top.pair.get-pinhole().x, 
+            (true-at.y - pair.top.pair.get-pinhole().y) + dy]) 
+      else: pair.top.translate([vector: true-at.x - pair.top.get-pinhole().x, 
+            (true-at.y - pair.top.get-pinhole().y) + dy]) 
       end
       if not(hide-bottom):
         [list: clip.defs] + map(clip-add, draw-prerendered-svg(pair.bottom.translate([vector: 0, dy]), fit-all).append(draw-prerendered-svg(trans-top, false)))

@@ -389,7 +389,8 @@ second argument, which goes on top of the third argument, etc. The images are al
                                                       "underlay-offset(circle(40, solid, red), 10, 10, circle(40, solid, blue))"
                                                       "underlay-offset(circle(40, solid, gray), 0, -10,
                 underlay-offset(circle(10, solid, navy), 
-                                -30, 0, circle(10, solid, navy)))"]}
+                                -30, 0, circle(10, solid, navy)))"
+                                             "underlay-offset(circle(40, solid, gray), 0, 0, circle(10, solid, navy))"]}
 
 @function["underlay-align-offset"]{Underlays image @pyret{i1} underneath @pyret{i2}, using @pyret{x-place} 
                                    and @pyret{y-place} as the starting points for the combination, and then 
@@ -454,7 +455,12 @@ second argument, which goes on top of the third argument, etc. The images are al
                                                   "beside-list([list: ellipse(20, 70, solid, gray),
                    ellipse(20, 50, solid, darkgray),
                    ellipse(20, 30, solid, dimgray),
-                   ellipse(20, 10, solid, black)])"]}
+                   ellipse(20, 10, solid, black)])"
+                                                  "beside-list([list: ellipse(20, 70, solid, gray),
+                  ellipse(20, 50, solid, darkgray)])"
+                                                  "beside-list([list: ellipse(20, 70, solid, gray),
+                  ellipse(20, 50, solid, darkgray),
+                  ellipse(20, 30, solid, dimgray)])"]}
 
 @function["beside-align"]{Constructs an image by placing all of the argument images in a horizontal row, lined up as indicated by the
                           @pyret{y-place} argument. For example, if @pyret{y-place} is @pyret{y-center}, then the images are placed 
@@ -494,7 +500,9 @@ second argument, which goes on top of the third argument, etc. The images are al
                                              "above(ellipse(70, 20, solid, gray),
       above(ellipse(50, 20, solid, darkgray), 
       above(ellipse(30, 20, solid, dimgray), 
-      ellipse(10, 20, solid, black))))"]}
+      ellipse(10, 20, solid, black))))"
+                                    "above(ellipse(70, 20, solid, gray), ellipse(50, 20, solid, darkgray))"
+                                    "above(ellipse(70, 20, solid, gray), above(ellipse(50, 20, solid, darkgray), ellipse(30, 20, solid, dimgray)))"]}
 
 @function["above-list"]{Similar to @pyret{above}, except that it accepts a nonempty list of images.
                                
