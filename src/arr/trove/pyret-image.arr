@@ -225,7 +225,7 @@ provide {
   place-image-align : place-image-align,
   frame : frame,
   draw-svg : draw-svg,
-  text: text
+  draw-debug : draw-debug
 } end
 provide-types *
 
@@ -1872,6 +1872,24 @@ end
 # SVG RENDERING FUNCTIONS
 ############
 
+fun raw-svg-rect(top-left :: Position, width :: Number, height :: Number):
+  x-attr = XML.attribute("x", XML.atomic(top-left.x))
+  y-attr = XML.attribute("y", XML.atomic(top-left.y))
+  width-attr = XML.attribute("width", XML.atomic(width))
+  height-attr = XML.attribute("height", XML.atomic(height))
+  style-attr = XML.attribute("style", XML.atomic("fill:none;stroke:black;stroke-width:1;"))
+  XML.tag("rect", [list: x-attr, y-attr, width-attr, height-attr, style-attr], empty)
+end
+
+fun raw-svg-dot(pos :: Position):
+  x-attr = XML.attribute("cx", XML.atomic(pos.x))
+  y-attr = XML.attribute("cy", XML.atomic(pos.y))
+  radius-attr = XML.attribute("r", XML.atomic(3))
+  stroke-attr = XML.attribute("stroke", XML.atomic("black"))
+  stroke-width-attr = XML.attribute("stroke-width", XML.atomic(1))
+  fill-attr = XML.attribute("fill", XML.atomic("none"))
+  XML.tag("circle", [list: x-attr, y-attr, radius-attr, stroke-attr, stroke-width-attr, fill-attr], empty)
+end
 
 fun num-inexact-string(n :: Number) -> String:
   doc: "Returns a string with a decimal representation of the given number"
@@ -2080,3 +2098,12 @@ fun draw-svg(i :: Image) -> XML.Element:
   XML.tag("svg", attrs, pre)
 end
 
+fun draw-debug(i :: Image) -> XML.Element:
+  cb = i.cornerbox()
+  cb-as-box = cb.to-box()
+  shadow frame = raw-svg-rect(cb.top-left, cb-as-box.width, cb-as-box.height)
+  center-dot = raw-svg-dot(i.get-center())
+  cases(XML.Element) draw-svg(i):
+    | tag(tname, attrs, pre) => XML.tag(tname, attrs, pre.append([list: frame, center-dot]))
+  end
+end

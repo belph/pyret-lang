@@ -26,7 +26,10 @@
 
 (provide USE-PYRET
          racket-comment
-         process-examples)
+         process-examples
+         prettify/pyret)
+
+(define DEBUG-IMAGES #f)
 
 ;; Path to phase 1 main-wrapper.js
 (define-runtime-path pyret-compiler
@@ -93,8 +96,10 @@
      ;; '(<(car pair)> . ' + torepr(draw-svg(<(cdr pair)>).tosource()) + ')'
      (string-append "print('("
                     (format "~a" sym)
-                    " . ' + torepr(draw-svg(" 
-                    exmp
+                    (if DEBUG-IMAGES
+                        " . ' + torepr(draw-debug("
+                        " . ' + torepr(draw-svg(")
+                    (fix-spacing exmp)
                     ").tosource()) + ')')")]))
 
 (define (prep-pyret-file-contents examples)
@@ -105,6 +110,10 @@
 
 (define (check-didnt-fail port)
   (cons? (regexp-match #px"The program didn't define any tests[.\n]{,5}$" (port->string port))))
+
+(define (fix-spacing str)
+  (regexp-replace* #rx" (?:(?!cases|constructor)([_a-zA-Z][_a-zA-Z0-9]*(?:-+[_a-zA-Z0-9]+)*)) \\("
+                   str " \\1("))
 
 #|
 ## How this whole thing works:
@@ -210,4 +219,39 @@
   (let ((split-up (string-split pretty-str "\n")))
     (cons (string-append EXAMPLES-PREFIX (car split-up)) 
           (map (λ(s)(string-append BUFFER s)) (cdr split-up)))))
+
+(define/contract (prettify/pyret example)
+  (string? . -> . string?)
+  (define prt (open-output-string))
+  (parameterize ([pretty-print-columns 80])
+    (pretty-display (prep-example-string example) prt))
+  (begin0 (fixup-str (get-output-string prt))
+          (close-output-port prt)))
+
+(define (fixup-str s)
+  (define FIRSTLASTPAREN #rx"(?:^\\()|(?:\\)$)")
+  (define PARENRX #px"\\s*'?\\(")
+  (define SINGLECOMMARX #px"\\s*\n\\s*,[ ]*\n")
+  (define SPACECOMMA #px"\\s*,(\\s*)")
+  (define (do-replacements s . rpl)
+    (if (empty? rpl) s
+        (apply do-replacements (regexp-replace* (caar rpl) s (cdar rpl)) (cdr rpl))))
+  (do-replacements s
+                   (cons PARENRX "(")
+                   (cons SINGLECOMMARX ",\n")
+                   (cons SPACECOMMA ",\\1")
+                   (cons FIRSTLASTPAREN "")))
+
+(define (prep-example-string s)
+  (define raw-read (read (open-input-string (string-append "(" s ")"))))
+  (define (smartcons a d)
+    (match a
+      [(list "unquote" sym) (cons "," (cons sym d))]
+      [else (cons a d)]))
+  (define (deep-map/splice f lst)
+    (cond [(empty? lst) lst]
+          [(cons? (car lst)) (smartcons (deep-map/splice f (car lst))
+                                   (deep-map/splice f (cdr lst)))]
+          [else (smartcons (f (car lst)) (deep-map/splice f (cdr lst)))]))
+  (deep-map/splice (λ(s)(format "~a" s)) raw-read))
   

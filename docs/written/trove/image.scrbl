@@ -115,7 +115,7 @@ Constructs an ellipse with the given width, height, mode, and color.
 Constructs an image representing a line segment that connects the points (0,0)
 to (x,y)
 @image-examples[#:racket (line 30 30 'black)
-                         "line(30, 30, black)"
+                         line(30, 30, black)
                          #:racket (line -30 30 "red")
                          "line(-30, 20, red)"
                          "line(30, -20, red)"]
@@ -272,14 +272,14 @@ second argument, which goes on top of the third argument, etc. The images are al
 
 @image-examples[#:racket (overlay (rectangle 30 60 'solid 'orange)
                                   (ellipse 60 30 'solid 'purple))
-                         "overlay(rectangle(30, 60, solid, orange), 
-         ellipse(60, 30, solid, purple))"
-                         "overlay(ellipse(10, 10, solid, red),
-         overlay(ellipse(20, 20, solid, black),
-         overlay(ellipse(30, 30, solid, red),
-         overlay(ellipse(40, 40, solid, black),
-         overlay(ellipse(50, 50, solid, red),
-         ellipse(60, 60, solid, black))))))"]
+                overlay(rectangle(30, 60, solid, orange), 
+                                 ellipse(60, 30, solid, purple))
+                overlay(ellipse(10, 10, solid, red),
+                               overlay(ellipse(20, 20, solid, black),
+                               overlay(ellipse(30, 30, solid, red),
+                               overlay(ellipse(40, 40, solid, black),
+                               overlay(ellipse(50, 50, solid, red),
+                               ellipse(60, 60, solid, black))))))]
 }
 
 @function["overlay-align"]{Overlays all of its image arguments, much like the @pyret{overlay} function, but using 
@@ -290,12 +290,12 @@ second argument, which goes on top of the third argument, etc. The images are al
                            @image-examples[#:racket (overlay/align "left" "middle"
                                                                    (rectangle 30 60 "solid" "orange")
                                                                    (ellipse 60 30 "solid" "purple"))
-                                                    "overlay-align(x-left, y-center, rectangle(30, 60, solid, orange),
-                                 ellipse(60, 30, solid, purple))"
-                                                    "overlay-align(x-right, y-bottom, rectangle(20, 20, solid, silver),
-        overlay-align(x-right, y-bottom, rectangle(30, 30, solid, seagreen),
-        overlay-align(x-right, y-bottom, rectangle(40, 40, solid, silver),
-                      rectangle(50, 50, solid, seagreen))))"]}
+                                           overlay-align(x-left, y-center, rectangle(30, 60, solid, orange),
+                                                               ellipse(60, 30, solid, purple))
+                                           overlay-align(x-right, y-bottom, rectangle(20, 20, solid, silver),
+                                                         overlay-align(x-right, y-bottom, rectangle(30, 30, solid, seagreen),
+                                                         overlay-align(x-right, y-bottom, rectangle(40, 40, solid, silver),
+                                                         rectangle(50, 50, solid, seagreen))))]}
 
 @function["overlay-offset"]{Just like @pyret{overlay}, this function lines up its image arguments on top of each other. 
                             Unlike @pyret{overlay}, it moves @pyret{i2} by @pyret{x} pixels to the right and 

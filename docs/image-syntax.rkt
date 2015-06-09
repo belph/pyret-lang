@@ -106,7 +106,7 @@
              (list #,@body)))
 
 ;; Creates one example
-(define-for-syntax (make-image-example racket pyret-str pyret-img)
+#;(define-for-syntax (make-image-example racket pyret-str pyret-img)
   #;(define equiv-str
     (quasisyntax/loc racket
       #,(racket-comment racket)))
@@ -123,6 +123,20 @@
           #`(element #f (list #,(pyret-example pyret-str)
                               #,spaced-pyret-img))
           #`(element #f #,(pyret-example pyret-str))))))
+
+(define-for-syntax (make-image-example racket pyret-str pyret-img)
+  (define racket-equiv? (not (equal? (syntax->datum racket) #f)))
+  (define has-image? (not (equal? pyret-img #f)))
+  ;; Ellipses for splicing
+  (with-syntax ([(equiv-str ...) (if racket-equiv? (list (pyret-example
+                                                          (string-join (racket-comment
+                                                                        (syntax->datum racket))
+                                                                       "\n"))) (list))]
+                [pyret-str (pyret-example (prettify/pyret (syntax->datum pyret-str)))]
+                [(pyret-img ...) (if has-image? (list (quasisyntax/loc racket
+                                                        (element #f (list (hspace 4) #,pyret-img)))) (list))])
+    (syntax/loc racket
+      (element #f (list equiv-str ... pyret-str pyret-img ...)))))
 
 (define-for-syntax (normalize sym)
   (string->symbol (format "~a" sym)))
