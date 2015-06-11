@@ -163,9 +163,25 @@ provide {
   x-right    : x-right,
   y-top      : y-top,
   y-center   : y-center,
-  y-bottom   : y-bottom
+  y-bottom   : y-bottom,
+  pen : pen,
+  style-dot : style-dot,
+  style-solid : style-solid,
+  style-long-dash : style-long-dash,
+  style-short-dash : style-short-dash,
+  style-dot-dash : style-dot-dash,
+  cap-round : cap-round,
+  cap-projecting : cap-projecting,
+  cap-butt : cap-butt,
+  join-bevel : join-bevel,
+  join-miter : join-miter,
+  join-round : join-round
 } end
 provide-types *
+
+import xml as XML
+
+DEFAULT_OUTLINE_WIDTH = 2
 
 # in-color-range:
 # Predicate to check whether or not
@@ -179,13 +195,118 @@ where:
   in-color-range(266) is false
 end
 
+## REMOVE FIELD AND MAKE METHOD TAKE WIDTH AS PARAM
+data Pen-Style:
+  | style-solid with:
+    dasharray(self, scale):
+      "0"
+    end
+  | style-dot with:
+    dasharray(self, scale):
+      nstr = num-tostring(scale)
+      nstr + "," + nstr
+    end
+  | style-long-dash with:
+    dasharray(self, scale):
+      nstr = num-tostring(scale)
+      floorstr = num-tostring(num-floor(scale / 2))
+      nstr + "," + floorstr
+    end
+  | style-short-dash with:
+    dasharray(self, scale):
+      nstr = num-tostring(scale)
+      fifthstr = num-tostring(num-max(1,num-floor(scale / 5)))
+      nstr + "," + fifthstr
+    end
+  | style-dot-dash with:
+    dasharray(self, scale):
+      nstr = num-tostring(scale)
+      dot-str = num-tostring(num-floor(scale * 3/10))
+      space-str = num-tostring(num-floor(scale / 5))
+      nstr + "," + space-str + dot-str + space-str
+    end
+sharing:
+  as-xml(self, scale):
+    XML.attribute("stroke-dasharray", XML.atomic(self.dasharray(scale)))
+  end
+end
+
+data Pen-Cap:
+  | cap-round with:
+    xml-string(self):
+      "round"
+    end
+  | cap-projecting with:
+    xml-string(self):
+      "square"
+    end
+  | cap-butt with:
+    xml-string(self):
+      "butt"
+    end
+sharing:
+  as-xml(self):
+    XML.attribute("stroke-linecap", XML.atomic(self.xml-string()))
+  end
+end
+
+data Pen-Join:
+  | join-round with:
+    _tostring(self, shadow tostring):
+      "round"
+    end
+  | join-bevel with:
+    _tostring(self, shadow tostring):
+      "bevel"
+    end
+  | join-miter with:
+    _tostring(self, shadow tostring):
+      "miter"
+    end
+sharing:
+  as-xml(self):
+    XML.attribute("stroke-linejoin", XML.atomic(tostring(self)))
+  end
+end
+
 # Represents Color Data
-# TODO: Default alpha to 255?
 data Color:
   | rgba-color(red :: Number%(in-color-range),
       green :: Number%(in-color-range),
       blue :: Number%(in-color-range),
       alpha :: Number%(in-color-range))
+    with:
+    style-string(self):
+      "rgba("
+      + num-tostring(self.red) + ","
+      + num-tostring(self.green) + ","
+      + num-tostring(self.blue) + ","
+      + num-to-string-digits(num-exact(self.alpha / 255), 10) + ")"
+    end,
+    scale(self, f): self end,
+    xml-stroke(self):
+      [list: XML.attribute("stroke", XML.atomic(self.style-string()))]
+    end,
+    outline-xml-attributes(self):
+      [list: XML.attribute("style", XML.atomic("stroke:" + self.style-string() + ";stroke-width:" + num-tostring(DEFAULT_OUTLINE_WIDTH) + ";fill:none;"))]
+    end,
+    solid-xml-attributes(self):
+      [list: XML.attribute("style", XML.atomic("fill:" + self.style-string() + ";"))]
+    end
+  | pen(color :: Color%(is-rgba-color), width :: Number%(in-color-range),
+      style :: Pen-Style, cap :: Pen-Cap, join :: Pen-Join) with:
+    outline-xml-attributes(self):
+      stroke-width = XML.attribute("stroke-width", XML.atomic(self.width))
+      [list: stroke-width, 
+        self.style.as-xml(if (self.width == 0): 1 else: self.width end),
+          self.cap.as-xml(), self.join.as-xml()].append(self.color.xml-stroke())
+    end,
+    solid-xml-attributes(self):
+      raise("Cannot get fill of pen")
+    end,
+    scale(self, factor :: Number%(num-is-non-negative)):
+      pen(self.color, self.width * factor, self.style, self.cap, self.join)
+    end
 end
 
 fun rgb-color(red :: Number%(in-color-range), green :: Number%(in-color-range), blue :: Number%(in-color-range)):

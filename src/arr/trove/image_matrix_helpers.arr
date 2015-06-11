@@ -25,6 +25,7 @@ provide {
   matrix-to-posns : matrix-to-posns,
   matrices-to-posns : matrices-to-posns,
   bezier-box : bezier-box,
+  cubic-bezier-bounding-box : cubic-bezier-bounding-box,
   bezier-snap-trans : bezier-snap-trans,
   bez-corner-box : bez-corner-box,
   poly-corner-box : poly-corner-box,
@@ -409,7 +410,7 @@ end
 fun bez-corner-box(pts :: List<IM_AUX.Position>) -> CornerBox:
   var pbs = [list: ]
   getSet = lam(n): [list: pts.get(0 + (3 * n)),pts.get(1 + (3 * n)),pts.get(2 + (3 * n)),pts.get(3 + (3 * n))] end # Returns one of the four bezier curves
-  for each(i from range(0,4)):
+  for each(i from range(0,num-min(4, num-floor(pts.length() / 4)))):
     st = getSet(i)
     pbs := pbs + [list: cubic-bezier-bounding-box(st.get(0),st.get(1),st.get(2),st.get(3))]
   end

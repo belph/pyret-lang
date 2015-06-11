@@ -96,7 +96,7 @@ The ultimate goal of this library is to replicate the functionality
 of Racket's @pyret{2htdp/image} library. This is a work in progress!
 Consider everything on this page subject to change.
 
-@section{Images}
+@section{Basic Images}
 @function["circle"]{
 Constructs a circle with the given radius, mode, and color.
 @image-examples[#:racket (circle 30 'outline 'red)
@@ -120,6 +120,47 @@ to (x,y)
                          "line(-30, 20, red)"
                          "line(30, -20, red)"]
 }
+
+@function["add-line"]{
+Adds a line to the image image, starting from the point (@pyret{x1},@pyret{y1}) and
+going to the point (@pyret{x2},@pyret{y2}). Unlike @pyret{add-line-to-scene}, if the line passes
+outside of @pyret{image}, the image gets larger to accommodate the line.
+@image-examples[#:racket (add-line (ellipse 40 40 'outline 'maroon) 0 40 40 0 'maroon)
+                         "add-line(ellipse(40, 40, outline, maroon), 0, 40, 40, 0, maroon)"
+                         "add-line(rectangle(40, 40, solid, gray), -10, 50, 50, -10, maroon)"
+                "add-line(rectangle(100, 100, solid, darkolivegreen),25, 25, 75, 75,
+          pen(goldenrod, 30, style-solid, cap-round, join-round))"]}
+
+@function["add-curve"]{
+Adds a curve to image, starting at the point (@pyret{x1},@pyret{y1}), and ending at the point (@pyret{x2},@pyret{y2}).
+
+The @pyret{angle1} and @pyret{angle2} arguments specify the angle that the curve has as it leaves the
+initial point and as it reaches the final point, respectively.
+
+The @pyret{pull1} and @pyret{pull2} arguments control how long the curve tries to stay with that angle.
+Larger numbers mean that the curve stays with the angle longer.
+
+Unlike @pyret{add-curve-to-scene}, if the line passes outside of @pyret{image}, the image gets larger to
+accommodate the curve.
+@image-examples[#:racket (add-curve (rectangle 100 100 'solid 'black)
+                                    20 20 0 1/3
+                                    80 80 0 1/3
+                                    'white)
+                "add-curve(rectangle(100, 100, solid, black),
+           20, 20, 0, 1/3,
+           80, 80, 0, 1/3, white)"
+                "add-curve(rectangle(100, 100, solid, black),
+           20, 20, 0, 1,
+           80, 80, 0, 1, white)"
+                "add-curve(add-curve(rectangle(40, 100, solid, black),
+                     20, 10, 180, 1/2,
+                     20, 90, 180, 1/2, pen(white, 4, style-solid, cap-round, join-round)),
+           20, 10, 0, 1/2,
+           20, 90, 0, 1/2, pen(white, 4, style-solid, cap-round, join-round))"
+                "add-curve(rectangle(100, 100, solid, black),
+           -20, -20, 0, 1, 120, 120, 0, 1, red)"]}
+
+@section{Polygons}
 
 @function["triangle"]{Constructs a upward-pointing equilateral triangle. 
  The @pyret{side-length} argument determines the length of the side of the triangle.
@@ -265,7 +306,70 @@ points. The first radius determines where the points begin, the second determine
 
 }
 
-@section["Overlaying images"]
+@function["polygon"]{Constructs a polygon connecting the given vertices.
+
+@image-examples[#:racket (polygon (list (make-posn 0 0)
+                                        (make-posn -10 20)
+                                        (make-posn 60 0)
+                                        (make-posn -10 -20))
+                                  "solid"
+                                  "burlywood")
+"polygon([list: posn(0, 0), posn(-10, 20), posn(60, 0), posn(-10, -20)],
+         solid, burlywood)"
+"polygon([list: posn(0, 0), posn(0, 40), posn(20, 40), posn(20, 60),
+                posn(40, 60), posn(40, 20), posn(20, 20), posn(20, 0)], solid, plum)"
+"underlay(rectangle(80, 80, solid, mediumseagreen),
+          polygon([list: posn(0, 0), posn(50, 0), posn(0, 50), posn(50, 50)], outline,
+                  pen(darkslategray, 10, style-solid, cap-round, join-round)))"
+"underlay(rectangle(80, 80, solid, mediumseagreen),
+          polygon([list: posn(0, 0), posn(50, 0), posn(0, 50), posn(50, 50)], outline,
+                  pen(darkslategray, 10, style-solid, cap-projecting, join-miter)))"]}
+
+@function["add-polygon"]{
+Adds a closed polygon to the image @pyret{image}, with vertices as specified in @pyret{posns}
+(relative to the top-left corner of @pyret{image}). Unlike @pyret{add-polygon-to-scene}, if the
+polygon goes outside the bounds of @pyret{image}, the result is enlarged to accommodate both.
+
+@image-examples[#:racket (add-polygon (rectangle 55 34 "solid" "light blue")
+                                      (list (make-posn 50 10)
+                                            (make-posn 20 15)
+                                            (make-posn 50 20)
+                                            (make-posn 10 25)
+                                            (make-posn 35 30))
+                                      "outline" "red")
+"add-polygon(rectangle(55, 34, solid, lightblue),
+             [list: posn(50, 10), posn(20, 15), posn(50, 20), posn(10, 25), posn(35, 30)], outline, red)"
+"add-polygon(square(65, solid, lightblue),
+             [list: posn(30, -20), posn(50, 50), posn(-20, 30)], solid, forestgreen)"
+"add-polygon(square(180, solid, yellow),
+             [list: posn(109, 160), posn(26, 148), posn(46, 36),
+                    posn(93, 44), posn(89, 68), posn(122, 72)], outline, darkblue)"
+"add-polygon(square(50, solid, lightblue),
+             [list: posn(25, -10), posn(60, 25), posn(25, 60), posn(-10, 25)], solid, pink)"]}
+
+@function["add-polygon-to-scene"]{
+Adds a closed polygon to the image @pyret{image}, with vertices as specified in @pyret{posns}
+(relative to the top-left corner of @pyret{image}). Unlike @pyret{add-polygon}, if the
+polygon goes outside the bounds of @pyret{image}, the result is clipped to @pyret{image}.
+
+@image-examples[#:racket (scene+polygon (rectangle 55 34 "solid" "light blue")
+                                        (list (make-posn 50 10)
+                                              (make-posn 20 15)
+                                              (make-posn 50 20)
+                                              (make-posn 10 25)
+                                              (make-posn 35 30))
+                                        "outline" "red")
+"add-polygon-to-scene(rectangle(55, 34, solid, lightblue),
+             [list: posn(50, 10), posn(20, 15), posn(50, 20), posn(10, 25), posn(35, 30)], outline, red)"
+"add-polygon-to-scene(square(65, solid, lightblue),
+             [list: posn(30, -20), posn(50, 50), posn(-20, 30)], solid, forestgreen)"
+"add-polygon-to-scene(square(180, solid, yellow),
+             [list: posn(109, 160), posn(26, 148), posn(46, 36),
+                    posn(93, 44), posn(89, 68), posn(122, 72)], outline, darkblue)"
+"add-polygon-to-scene(square(50, solid, lightblue),
+             [list: posn(25, -10), posn(60, 25), posn(25, 60), posn(-10, 25)], solid, pink)"]}
+
+@section{Overlaying images}
 
 @function["overlay"]{Overlays all of its arguments building a single image. The first argument goes on top of the
 second argument, which goes on top of the third argument, etc. The images are all lined up on their centers.
@@ -390,6 +494,9 @@ second argument, which goes on top of the third argument, etc. The images are al
                                                       "underlay-offset(circle(40, solid, gray), 0, -10,
                 underlay-offset(circle(10, solid, navy), 
                                 -30, 0, circle(10, solid, navy)))"
+                                                      "underlay-offset(circle(40, solid, gray), 0, -10,
+                underlay-offset(circle(10, solid, navy), 
+                                30, 0, circle(10, solid, navy)))"
                                              "underlay-offset(circle(40, solid, gray), 0, 0, circle(10, solid, navy))"]}
 
 @function["underlay-align-offset"]{Underlays image @pyret{i1} underneath @pyret{i2}, using @pyret{x-place} 
@@ -547,6 +654,12 @@ second argument, which goes on top of the third argument, etc. The images are al
 
 @section["Placing Images"]
 
+@function["empty-scene"]{
+Creates an empty scene, i.e., a white rectangle with a black outline.
+
+@image-examples[#:racket (empty-scene 160 90)
+                         "empty-scene(160, 90)"]}
+
 @function["place-image"]{Places @pyret{image} onto @pyret{scene} with its center at the coordinates (x,y) 
                          and crops the resulting image so that it has the same size as @pyret{scene}. The 
                          coordinates are relative to the top-left of @pyret{scene}.
@@ -604,6 +717,69 @@ second argument, which goes on top of the third argument, etc. The images are al
                     posn(14, 2),
                     posn(8, 14)],
              rectangle(24, 24, solid, goldenrod))"]}
+
+@function["place-images-align"]{Like @pyret{place-images}, except that it places the
+images with respect to @pyret{x-place} and @pyret{y-place}.
+
+@image-examples[#:racket (place-images/align
+                          (list (triangle 48 "solid" "yellowgreen")
+                                (triangle 48 "solid" "yellowgreen")
+                                (triangle 48 "solid" "yellowgreen")
+                                (triangle 48 "solid" "yellowgreen"))
+                          (list (make-posn 64 64)
+                                (make-posn 64 48)
+                                (make-posn 64 32)
+                                (make-posn 64 16))
+                          "right" "bottom"
+                          (rectangle 64 64 "solid" "mediumgoldenrod"))
+                "place-images-align([list: triangle(48, solid, yellowgreen),
+                           triangle(48, solid, yellowgreen),
+                           triangle(48, solid, yellowgreen),
+                           triangle(48, solid, yellowgreen)],
+                    [list: posn(64, 64), posn(64, 48), posn(64, 32), posn(64, 16)], x-right, y-bottom,
+                    rectangle(64, 64, solid, mediumgoldenrod))"]}
+
+@function["add-line-to-scene"]{
+Adds a line to the image @pyret{scene}, starting from the point (@pyret{x1},@pyret{y1}) and going to
+the point (@pyret{x2},@pyret{y2}); unlike @pyret{add-line}, this function crops the resulting image
+to the size of @pyret{scene}.
+
+@image-examples[#:racket (scene+line (ellipse 40 40 "outline" "maroon")
+              0 40 40 0 "maroon")
+                         "add-line-to-scene(ellipse(40, 40, outline, maroon), 0, 40, 40, 0, maroon)"
+                         "add-line-to-scene(rectangle(40, 40, solid, gray), -10, 50, 50, -10, maroon)"
+                "add-line-to-scene(rectangle(100, 100, solid, darkolivegreen),
+                   25, 25, 100, 100,
+                   pen(goldenrod, 30, style-solid, cap-round, join-round))"]}
+
+@function["add-curve-to-scene"]{
+Adds a curve to @pyret{scene}, starting at the point (@pyret{x1},@pyret{y1}), and ending at the point (@pyret{x2},@pyret{y2}).
+
+The @pyret{angle1} and @pyret{angle2} arguments specify the angle that the curve has as it leaves the
+initial point and as it reaches the final point, respectively.
+
+The @pyret{pull1} and @pyret{pull2} arguments control how long the curve tries to stay with that angle.
+Larger numbers mean that the curve stays with the angle longer.
+
+Unlike @pyret{add-curve}, this function crops the curve, only showing the parts that fit onto @pyret{scene}.
+
+@image-examples[#:racket (scene+curve (rectangle 100 100 "solid" "black")
+                                      20 20 0 1/3
+                                      80 80 0 1/3
+                                      "white")
+"add-curve-to-scene(rectangle(100, 100, solid, black),
+                    20, 20, 0, 1/3,
+                    80, 80, 0, 1/3, white)"
+"add-curve-to-scene(rectangle(100, 100, solid, black),
+                    20, 20, 0, 1,
+                    80, 80, 0, 1, white)"
+"add-curve-to-scene(add-curve(rectangle(40, 100, solid, black),
+                              20, 10, 180, 1/2,
+                              20, 90, 180, 1/2, white),
+                    20, 10, 0, 1/2,
+                    20, 90, 0, 1/2, white)"
+"add-curve-to-scene(rectangle(100, 100, solid, black),
+                    -20, -20, 0, 1, 120, 120, 0, 1, red)"]}
 
 @function["frame"]{Returns an image just like @pyret{image}, except with a black, 
                    single pixel frame drawn around the bounding box of the image.
@@ -673,6 +849,8 @@ Rotates the image by the given @pyret{theta} degrees counterclockwise.
 
 @image-examples[#:racket (rotate 45 (ellipse 60 20 "solid" "olivedrab"))
                          "ellipse(60, 20, solid, olivedrab).rotate(45)"
+                         "ellipse(60, 20, solid, olivedrab).rotate(45).rotate(-45)"
+                         "ellipse(60, 20, solid, olivedrab).rotate(30).scale-x(2).rotate(60)"
                          "rectangle(50, 50, outline, black).rotate(5)"
                          "beside-align(y-center, rectangle(40, 20, solid, darkseagreen),
              rectangle(20, 100, solid, darkseagreen)).rotate(45)"]}
@@ -688,7 +866,11 @@ Crops the image to the rectangle with the upper left point at
                          "above(beside(circle(40, solid, palevioletred).crop(40, 40, 40, 40),
              circle(40, solid, lightcoral).crop(0, 40, 40, 40)),
       beside(circle(40, solid, lightcoral).crop(40, 0, 40, 40),
-             circle(40, solid, palevioletred).crop(0, 0, 40, 40)))"]}
+             circle(40, solid, palevioletred).crop(0, 0, 40, 40)))"
+                "beside(circle(40, solid, palevioletred).crop(40, 40, 40, 40),
+                circle(40, solid, lightcoral).crop(0, 40, 40, 40))"
+                "above(circle(40, solid, palevioletred).crop(40, 40, 40, 40),
+                circle(40, solid, lightcoral).crop(40, 0, 40, 40))"]}
 
 @image-method["crop-align"]{
 
