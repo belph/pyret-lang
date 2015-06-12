@@ -492,6 +492,8 @@ type Box = IM_AUX_DATA.Box
 type Interval = IM_AUX_DATA.Interval
 
 posn = IM_AUX_DATA.posn
+explicit-posn = IM_AUX_DATA.explicit-posn
+is-explicit-posn = IM_AUX_DATA.is-explicit-posn
 box = IM_AUX_DATA.box
 ivl = IM_AUX_DATA.ivl
 
@@ -630,7 +632,7 @@ fun calc-compound-vector(top-img, bot-img, bot-center, at):
   # print('[calc-compound-vector start]')
   basis = bot-img.coord-zero()
   true-at = posn(at.x + basis.x, at.y + basis.y)
-  tpin = top-img.get-pinhole()
+  tpin = top-img.get-center()
   
   # print('basis   : ' + torepr(basis))
   # print('true-at : ' + torepr(true-at))
@@ -714,7 +716,7 @@ data Image:
     end,
     
     affine-transform(self, transformation :: M.Matrix%(matrix2d)) -> Image:
-      self.affine-transform-about(transformation,self.center)
+      self.affine-transform-about(transformation,self.get-center())
     end,
     
     snap-vec(self):
@@ -745,10 +747,10 @@ data Image:
     end,
     
     put-pinhole(self, phx :: Number, phy :: Number) -> Image:
-      polygon(self.matrix, self.mode, self.color, posn(phx,phy))
+      polygon(self.matrix, self.mode, self.color, explicit-posn(phx,phy))
     end,
     
-    remove-pinhole(self) -> Image:
+    clear-pinhole(self) -> Image:
       sbb = self.get-box()
       polygon(self.matrix, self.mode, self.color, posn(sbb.width / 2, sbb.height / 2))
     end,
@@ -807,7 +809,7 @@ data Image:
     end,
     
     affine-transform(self, transformation :: M.Matrix%(matrix2d)) -> Image:
-      self.affine-transform-about(transformation,self.center)
+      self.affine-transform-about(transformation,self.get-center())
     end,
     
     snap-vec(self):
@@ -838,10 +840,10 @@ data Image:
     end,
     
     put-pinhole(self, phx :: Number, phy :: Number) -> Image:
-      bezier-shape(self.matrix, self.mode, self.color, posn(phx,phy))
+      bezier-shape(self.matrix, self.mode, self.color, explicit-posn(phx,phy))
     end,
     
-    remove-pinhole(self) -> Image:
+    clear-pinhole(self) -> Image:
       sbb = self.get-box()
       bezier-shape(self.matrix, self.mode, self.color, posn(sbb.width / 2, sbb.height / 2))
     end,
@@ -857,11 +859,7 @@ data Image:
       center   :: Position
       ) with:
     get-box(self):
-      if (is-clipped-image(self.top)):
-        new-box(self.top,self.at.x,self.at.y,self.bottom,self.top.pair.center)
-      else:
-        new-box(self.top,self.at.x,self.at.y,self.bottom, self.top.center)
-      end
+      new-box(self.top,self.at.x,self.at.y,self.bottom,self.top.get-center())
     end,
     
     translate(self, v :: M.Vector) -> Image: 
@@ -873,18 +871,91 @@ data Image:
     #end,
     
     affine-transform(self, transformation :: M.Matrix%(matrix2d)) -> Image:
-      ti = self.top.affine-transform-about(transformation,self.center).snap-axes()
-      bi = self.bottom.affine-transform-about(transformation,self.center).snap-axes()
-      ob = self.get-box()
-      old-bottom = self.bottom.get-box()
-      new-bottom = bi.get-box()
-      relpos = posn(self.center.x / ob.width, self.center.y / ob.height)
-      new-at = posn((self.at.x * new-bottom.width) / old-bottom.width, (self.at.y * new-bottom.height) / old-bottom.height)
-      nb = new-box(ti,new-at.x, new-at.y,bi, ti.center)
-      new-c = posn(relpos.x * nb.width, relpos.y * nb.height)
+      current-center = self.get-center()
+      bottom-center = self.bottom.get-center()
+      ti = self.top.affine-transform-about(transformation,current-center)
+      bi = self.bottom.affine-transform-about(transformation,current-center)
+      ti-snap = ti.snap-axes()
+      bi-snap = bi.snap-axes()
+      # Convert self.at to global coordinates and transform
+      bottom-zero = self.bottom.coord-zero()
+      true-at = posn(bottom-zero.x + self.at.x, bottom-zero.y + self.at.y)
+      trans-at = transform-posn-about(transformation, true-at, current-center)
+      # Use the newly transformed bottom to relativize the transformed self.at
+      bi-zero = bi.coord-zero()
+      #bi-center = bi.get-center()
+      new-at = posn(trans-at.x - bi-zero.x, trans-at.y - bi-zero.y)
+      ti-vec = ti.snap-vec()
+      bi-vec = bi.snap-vec()
+      # Do same transformations on pinhole
+      #pin-off = posn(self.center.x - current-center.x, self.center.y - current-center.y)
+      #trans-off = transform-posn-about(transformation, self.center, current-center)
+      #true-pinhole = posn(bottom-zero.x + self.center.x, bottom-zero.y + self.center.y)
+      #trans-pinhole = transform-posn-about(transformation, true-pinhole, current-center)
+      #new-pin = posn(trans-pinhole.x - bi-zero.x, trans-pinhole.y - bi-zero.y)
+      # svec = bi.snap-vec()
+      # svec-pin = posn(bi-vec.first, bi-vec.rest.first)
+      offset = posn(self.center.x - current-center.x, self.center.y - current-center.y)
+      trans-off = transform-posn(transformation, offset)
+      # plus-svec = posn(svec-pin.x + self.center.x, svec-pin.y + self.center.y)
+      dvec = calc-compound-vector(ti-snap, bi-snap, bi-snap.get-center(), new-at)
+      trans-topx-p = dvec.first  >= 0 
+      trans-topy-p = dvec.get(1) >= 0
+      dtx = if trans-topx-p: dvec.first  else: 0 end
+      dty = if trans-topy-p: dvec.get(1) else: 0 end
+      dbx = if trans-topx-p: 0 else: -1 * dvec.first  end
+      dby = if trans-topy-p: 0 else: -1 * dvec.get(1) end
+
+      #simple-trans = transform-posn(transformation, self.center)
+      top-trans-box = ti-snap.cornerbox().translate(dtx, dty)
+      transformed-box = top-trans-box.join(bi-snap.cornerbox().translate(dbx, dby))
+      tb-center = transformed-box.get-center()
+      # new-pin = transformed-box.get-center()
+      new-pin = self.make-pinhole(trans-off.x + tb-center.x, trans-off.y + tb-center.y)
+      #new-pin = trans-off
+      #new-pin = posn(self.center.x + svec.first, self.center.y + svec.rest.first)
+      #new-pin = posn(svec-pin.x + dtx + dbx, svec-pin.y + dty + dby)
+      # new-pin = plus-svec
+      fun smart-str(l :: List<Number>):
+        "[list: " + l.map(lam(n): num-to-string-digits(n, 5) end).join-str(", ") + "]"
+      end
+      #new-pin = transform-posn-about(transformation, self.center, current-center)
+      # print('')
+      # print('[affine-transform start]')
+      # print('bottom-zero    : ' + torepr(bottom-zero))
+      # print('current-center : ' + torepr(current-center))
+      # print('bottom-center  : ' + torepr(bottom-center))
+      # print('at             : ' + torepr(self.at))
+      # print('center         : ' + torepr(self.center))
+      # print('true-at        : ' + torepr(true-at))
+      # print('trans-at       : ' + torepr(trans-at))
+      # print('bi-zero        : ' + torepr(bi-zero))
+      # print('tb-center      : ' + torepr(tb-center))
+      # print('new-at         : ' + torepr(new-at))
+      # print('offset         : ' + torepr(offset))
+      # print('trans-off      : ' + torepr(trans-off))
+      # #print('dtx            : ' + torepr(dtx))
+      # #print('dty            : ' + torepr(dty))
+      # #print('dbx            : ' + torepr(dbx))
+      # #print('dby            : ' + torepr(dby))
+      # #print('plus-svec      : ' + torepr(plus-svec))
+      # print('new-pin        : ' + torepr(new-pin))
+      # #print('simple-trans   : ' + torepr(simple-trans))
+      # print('ti.snap-vec()  : ' + smart-str(ti-vec))
+      # print('bi.snap-vec()  : ' + smart-str(bi-vec))
+      # print('[affine-transform end]')
+      # print('')
+      
+      #ob = self.get-box()
+      #old-bottom = self.bottom.get-box()
+      #new-bottom = bi.get-box()
+      #relpos = posn(self.center.x / ob.width, self.center.y / ob.height)
+      #new-at = posn((self.at.x * new-bottom.width) / old-bottom.width, (self.at.y * new-bottom.height) / old-bottom.height)
+      #nb = new-box(ti,new-at.x, new-at.y,bi, ti.center)
+      #new-c = posn(relpos.x * nb.width, relpos.y * nb.height)
       #new-c = transform-posn-about(transformation, self.center, self.center)
       #new-at = posn(self.at.x + (new-c.x - self.center.x),self.at.y + (new-c.y - self.center.y))
-      compound-image(ti, new-at, bi, new-c)
+      compound-image(ti-snap, new-at, bi-snap, new-pin)
       
       #compound-image(self.top.translate([vector: (-1 * self.center.x), (-1 * self.center.y)] ).affine-transform(transformation).translate([vector: self.center.x, self.center.y]), self.at,
        # self.bottom.translate([vector: (-1 * self.center.x), (-1 * self.center.y)] ).affine-transform(transformation).translate([vector: self.center.x, self.center.y]),self.center)
@@ -963,17 +1034,17 @@ data Image:
     end,
     
     put-pinhole(self, phx :: Number, phy :: Number) -> Image:
-      compound-image(self.top, self.at, self.bottom, posn(phx,phy))
+      compound-image(self.top, self.at, self.bottom, explicit-posn(phx,phy))
     end,
     
-    remove-pinhole(self) -> Image:
+    clear-pinhole(self) -> Image:
       sbb = self.get-box()
       compound-image(self.top, self.at, self.bottom, posn(sbb.width / 2, sbb.height / 2))
     end,
     
     cornerbox(self) -> CornerBox:
       # print('\n[cornerbox() start]')
-      dvec = calc-compound-vector(self.top, self.bottom, self.bottom.get-pinhole(), self.at)
+      dvec = calc-compound-vector(self.top, self.bottom, self.bottom.get-center(), self.at)
       # print('              dvec: ' + torepr(dvec))
       trans-topx-p = dvec.first  >= 0 
       trans-topy-p = dvec.get(1) >= 0
@@ -1057,8 +1128,8 @@ data Image:
       clipped-image(self.pair.put-pinhole(phx,phy), self.hidden-mask)
     end,
     
-    remove-pinhole(self) -> Image:
-      new-c = self.pair.bottom.remove-pinhole().center
+    clear-pinhole(self) -> Image:
+      new-c = self.pair.bottom.clear-pinhole().center
       clipped-image(compound-image(self.pair.top, self.pair.at, self.pair.bottom, new-c), self.hidden-mask)
     end,
     
@@ -1107,7 +1178,7 @@ sharing:
     doc: "Crops the image to a rectangle of the given width and height and its top-left corner at the given (x,y) position"
     self-bb = self.get-box()
     at = posn((self-bb.width / 2) - x, (self-bb.height / 2) - y)
-    clipped-image(compound-image(self,at, rectangle(polygon, width,height,outline,black),posn((width / 2), (height / 2))),true)
+    clipped-image(compound-image(self,at, rectangle(polygon, width,height,outline,black),self.make-pinhole((width / 2), (height / 2))),true)
   end,
   crop-align(self, xp :: X-Place, yp :: Y-Place, width :: Number, height :: Number):
     doc: "Crops the image to a rectangle of the given width and height placed at the given alignment"
@@ -1121,7 +1192,7 @@ sharing:
         | y-center => (height / 2)
         | y-bottom => (height) - (self-bb.height / 2)
       end)
-    clipped-image(compound-image(self, at, rectangle(polygon, width,height,outline,black),posn(width / 2, height / 2)), true)
+    clipped-image(compound-image(self, at, rectangle(polygon, width,height,outline,black),self.make-pinhole(width / 2, height / 2)), true)
   end,
   width(self) -> Number:
     doc: "Returns the image's width"
@@ -1145,6 +1216,33 @@ sharing:
       self.pair.get-pinhole()
     else:
       self.center
+    end
+  end,
+  pinhole-x(self):
+    pin = self.get-pinhole()
+    if is-explicit-posn(pin):
+      pin.x
+    else:
+      false
+    end
+  end,
+  pinhole-y(self):
+    pin = self.get-pinhole()
+    if is-explicit-posn(pin):
+      pin.y
+    else:
+      false
+    end
+  end,
+  center-pinhole(self) -> Image:
+    center = self.get-center()
+    self.put-pinhole(center.x, center.y)
+  end,
+  make-pinhole(self, x :: Number, y :: Number) -> Position:
+    if is-explicit-posn(self.get-pinhole()):
+      explicit-posn(x, y)
+    else:
+      posn(x, y)
     end
   end
 #  end,
@@ -1737,6 +1835,36 @@ fun fix-overlay-center(i1 :: Image, at :: Position, old-center :: Position) -> P
   posn(old-center.x + num-max(0,sv.first),
     old-center.y + num-max(0,sv.get(1)))
 end
+
+fun pin-to-one(i :: Image, use-top :: Boolean) -> Image:
+  cases(Image) i:
+    | clipped-image(pair, hidden) => 
+      #Always re-pin to background on clipped image
+      clipped-image(compound-image(pair.top, pair.at, pair.bottom, pair.bottom.get-center()), hidden)
+    | compound-image(top, at, bottom, pin) =>
+      dvec = calc-compound-vector(top, bottom, bottom.get-center(), at)
+      trans-topx-p = dvec.first  >= 0 
+      trans-topy-p = dvec.get(1) >= 0
+      dtx = if trans-topx-p: dvec.first  else: 0 end
+      dty = if trans-topy-p: dvec.get(1) else: 0 end
+      dbx = if trans-topx-p: 0 else: -1 * dvec.first  end
+      dby = if trans-topy-p: 0 else: -1 * dvec.get(1) end
+      top-trans-box = top.cornerbox().translate(dtx, dty)
+      bot-trans-box = bottom.cornerbox().translate(dbx, dby)
+      make-pin = if use-top: top.make-pinhole else: bottom.make-pinhole end
+      joined = top-trans-box.join(bot-trans-box)
+      rel-pin = if use-top: top.get-pinhole() else: bottom.get-pinhole() end
+      pin-box = if use-top: top-trans-box else: bot-trans-box end
+      real-pin = posn(pin-box.top-left.x + rel-pin.x, pin-box.top-left.y + rel-pin.y)
+      new-pin = make-pin(real-pin.x - joined.top-left.x, real-pin.y - joined.top-left.y)
+      compound-image(top, at, bottom, new-pin)
+    | else => i
+  end
+end
+
+# Convienence functions:
+pin-to-top = lam(i): pin-to-one(i, true) end
+pin-to-bottom = lam(i): pin-to-one(i, false) end
   
 
 # End Helper Functions
@@ -1744,25 +1872,40 @@ end
 # Begin Overlay Functions
 fun overlay(i1 :: Image, i2 :: Image) -> Image:
   doc: "Overlays the first image onto the second"
-  i2-no-pin = i2.remove-pinhole()
-  i2-no-pin-center = i2-no-pin.get-center()
-  compound-image(i1.remove-pinhole(), i2-no-pin-center, i2-no-pin, i2-no-pin-center).snap-axes()
+  #i2-no-pin = i2.clear-pinhole()
+  #i2-no-pin-center = i2-no-pin.get-center()
+  i2-center = i2.get-center()
+  pin-to-top(compound-image(i1, i2-center, i2, i2-center).snap-axes())
 end
 
 fun overlay-pinhole(i1 :: Image, i2 :: Image) -> Image:
   doc: "Overlays the first image onto the second using their pinholes"
   #Note: Default pinhole is true center
   #TODO: Find better fix than this translation vector
-  tc = if is-clipped-image(i1): i1.pair.get-center() else: i1.get-center() end
-  comp-top = i1.translate([vector: i2.get-center().x - tc.x, i2.get-center().y - tc.y])
-  sv = compound-image(comp-top, i2.get-center(), i2, i2.get-center()).snap-vec()
-  compound-image(comp-top.translate(sv), i2.get-center(), i2.translate(sv), translate-posn(i2.get-center(),sv)).snap-axes()
+  # basis = bot-img.coord-zero()
+  # true-at = posn(at.x + basis.x, at.y + basis.y)
+  # tpin = top-img.get-pinhole()
+  # 
+  # dvec = [list: true-at.x - tpin.x, true-at.y - tpin.y] calc-compound-vector(top, bottom, bottom.get-center(), at)
+  # trans-topx-p = dvec.first  >= 0 
+  # trans-topy-p = dvec.get(1) >= 0
+  # dtx = if trans-topx-p: dvec.first  else: 0 end
+  # dty = if trans-topy-p: dvec.get(1) else: 0 end
+  # dbx = if trans-topx-p: 0 else: -1 * dvec.first  end
+  # dby = if trans-topy-p: 0 else: -1 * dvec.get(1) end
+  #tc = i1.get-pinhole()
+  #comp-top = i1.translate([vector: i2.get-pinhole().x - tc.x, i2.get-pinhole().y - tc.y])
+  #sv = compound-image(comp-top, i2.get-pinhole(), i2, i2.get-pinhole()).snap-vec()
+  #pin-to-top(compound-image(comp-top.translate(sv), i2.get-pinhole(), i2.translate(sv), translate-posn(i2.get-pinhole(),sv)).snap-axes())
+  tpin = i1.get-pinhole()
+  bpin = i2.get-pinhole()
+  overlay-xy(i1, tpin.x - bpin.x, tpin.y - bpin.y, i2)
 end
 
-fun overlay-align(xp :: X-Place, yp :: Y-Place, ri1 :: Image, ri2 :: Image) -> Image:
+fun overlay-align(xp :: X-Place, yp :: Y-Place, i1 :: Image, i2 :: Image) -> Image:
   doc: "Overlays the first image onto the second with the given alignments"
-  i1 = ri1.remove-pinhole()
-  i2 = ri2.remove-pinhole()
+  #i1 = ri1.clear-pinhole()
+  #i2 = ri2.clear-pinhole()
   tb = i1.get-box()
   bb = i2.get-box()
   xpos = cases(X-Place) xp:
@@ -1776,23 +1919,23 @@ fun overlay-align(xp :: X-Place, yp :: Y-Place, ri1 :: Image, ri2 :: Image) -> I
     | y-bottom => bb.height - (tb.height / 2)
   end
   new-c = new-center(i1,xpos,ypos,i2)
-  compound-image(i1, posn(xpos, ypos), i2, new-c).snap-axes()
+  pin-to-top(compound-image(i1, posn(xpos, ypos), i2, new-c).snap-axes())
 end
 
 fun overlay-offset(i1 :: Image, x :: Number, y :: Number, i2 :: Image) -> Image:
   doc: "Overlays the first image onto the second after shifting the second x pixels to the right and y down"
-  #i1-np = i1.remove-pinhole()
-  i2-np = i2.remove-pinhole()
-  i2-np-center = i2-np.get-center()
-  at = posn(i2-np-center.x - x, i2-np-center.y - y)
+  #i1-np = i1.clear-pinhole()
+  #i2-np = i2.clear-pinhole()
+  i2-center = i2.get-center()
+  at = posn(i2-center.x - x, i2-center.y - y)
   new-c = new-center(i1,at.x,at.y,i2)
-  compound-image(i1, at, i2, new-c).remove-pinhole().snap-axes()
+  pin-to-top(compound-image(i1, at, i2, new-c).clear-pinhole().snap-axes())
 end
 
-fun overlay-align-offset(xp :: X-Place, yp :: Y-Place, ri1 :: Image, x :: Number, y :: Number, ri2 :: Image) -> Image:
+fun overlay-align-offset(xp :: X-Place, yp :: Y-Place, i1 :: Image, x :: Number, y :: Number, i2 :: Image) -> Image:
   doc: "Overlays the first image onto the second with the given alignments after shifting it x pixels to the right and y down"
-  i1 = ri1.remove-pinhole()
-  i2 = ri2.remove-pinhole()
+  #i1 = ri1.clear-pinhole()
+  #i2 = ri2.clear-pinhole()
   tb = i1.get-box()
   bb = i2.get-box()
   xpos = cases(X-Place) xp:
@@ -1806,18 +1949,18 @@ fun overlay-align-offset(xp :: X-Place, yp :: Y-Place, ri1 :: Image, x :: Number
     | y-bottom => (bb.height - (tb.height / 2)) - y
   end
   new-c = new-center(i1,xpos,ypos,i2)
-  compound-image(i1, posn(xpos, ypos), i2, new-c).snap-axes()
+  pin-to-top(compound-image(i1, posn(xpos, ypos), i2, new-c).snap-axes())
 end
 
-fun overlay-xy(ri1 :: Image, x :: Number, y :: Number, ri2 :: Image) -> Image:
+fun overlay-xy(i1 :: Image, x :: Number, y :: Number, i2 :: Image) -> Image:
   # Identical to underlay-xy(i2,(-1 * x), (-1 * y), i1)
   doc: "Overlays the first image onto the second. The images are initially lined up on their upper-left corners and then the bottom one is shifted to the right by x to and down by y."
-  i1 = ri1.remove-pinhole()
-  i2 = ri2.remove-pinhole()
+  #i1 = ri1.clear-pinhole()
+  #i2 = ri2.clear-pinhole()
   tb = i1.get-box()
   at = posn((tb.width / 2) - x, (tb.height / 2) - y)
   new-c = new-center(i1, at.x, at.y, i2)
-  compound-image(i1, at, i2, new-c).snap-axes()
+  pin-to-top(compound-image(i1, at, i2, new-c).snap-axes())
 end
 
 # End Overlay Functions
@@ -1829,47 +1972,47 @@ end
 
 fun underlay(i1 :: Image, i2 :: Image) -> Image:
   doc: "Underlays the first image beneath the second (like overlay, but in reverse order)"
-  overlay(i2, i1)
+  pin-to-bottom(overlay(i2, i1))
 end
 
 fun underlay-pinhole(i1 :: Image, i2 :: Image) -> Image:
   doc: "Underlays the first image beneath the second using their pinholes"
-  overlay-pinhole(i2,i1)
+  pin-to-bottom(overlay-pinhole(i2,i1))
 end
 
 fun underlay-align(xp :: X-Place, yp :: Y-Place, i1 :: Image, i2 :: Image) -> Image:
   doc: "Underlays the first image beneath the second with the given alignments"
-  overlay-align(xp, yp, i2, i1)
+  pin-to-bottom(overlay-align(xp, yp, i2, i1))
 end
 
 
 fun underlay-offset(i1 :: Image, x :: Number, y :: Number, i2 :: Image) -> Image:
   doc: "Underlays the first image beneath the second, after offsetting it right and down by the given amount"
-  overlay-offset(i2, (-1 * x), (-1 * y), i1)
+  pin-to-bottom(overlay-offset(i2, (-1 * x), (-1 * y), i1))
 end
 
 fun underlay-align-offset(xp :: X-Place, yp :: Y-Place, i1 :: Image, x :: Number, y :: Number, i2 :: Image) -> Image:
   doc: "Underlays the first image beneath the second with the given alignments, after offsetting it right and down by the given amount"
-  overlay-align-offset(xp, yp, i2, (-1 * x), (-1 * y), i1)
+  pin-to-bottom(overlay-align-offset(xp, yp, i2, (-1 * x), (-1 * y), i1))
 end
 
 fun underlay-xy(i1 :: Image, x :: Number, y :: Number, i2 :: Image) -> Image:
   doc: "Underlays the first image beneath the second by aligning their top left corners and shifting the second right and down by the given amount"
-  overlay-xy(i2, (-1 * x), (-1 * y), i1)
+  pin-to-bottom(overlay-xy(i2, (-1 * x), (-1 * y), i1))
 end
 
-fun beside(ri1 :: Image, ri2 :: Image) -> Image:
+fun beside(i1 :: Image, i2 :: Image) -> Image:
   doc: "Places the second image next to the first, with their centers vertically aligned"
-  first-is-left = ri1.get-center().x <= ri2.get-center().x
-  #i1 = if first-is-left: ri1.remove-pinhole() else: ri2.remove-pinhole() end
-  #i2 = if first-is-left: ri2.remove-pinhole() else: ri1.remove-pinhole() end
-  i1 = ri1.remove-pinhole()
-  i2 = ri2.remove-pinhole()
+  first-is-left = i1.get-center().x <= i2.get-center().x
+  #i1 = if first-is-left: ri1.clear-pinhole() else: ri2.clear-pinhole() end
+  #i2 = if first-is-left: ri2.clear-pinhole() else: ri1.clear-pinhole() end
+  #i1 = ri1.clear-pinhole()
+  #i2 = ri2.clear-pinhole()
   fb = i1.get-box()
   sb = i2.get-box()
   at = posn(fb.width + (sb.width / 2), i1.get-center().y)
   new-c = new-center(i2,at.x,at.y,i1)
-  compound-image(i2,at,i1,new-c).snap-axes()
+  pin-to-bottom(compound-image(i2,at,i1,new-c).snap-axes())
 end
 
 fun beside-list(imgs :: List<Image>) -> Image:
@@ -1878,10 +2021,10 @@ fun beside-list(imgs :: List<Image>) -> Image:
   imgs.rest.foldl(swapped,imgs.first)
 end
 
-fun beside-align(yp :: Y-Place, ri1 :: Image, ri2 :: Image) -> Image:
+fun beside-align(yp :: Y-Place, i1 :: Image, i2 :: Image) -> Image:
   doc: "Places the second image next to the first, with the given vertical alignment"
-  i1 = ri1.remove-pinhole()
-  i2 = ri2.remove-pinhole()
+  #i1 = ri1.clear-pinhole()
+  #i2 = ri2.clear-pinhole()
   fb = i1.get-box()
   sb = i2.get-box()
   xpos = fb.width + (sb.width / 2)
@@ -1891,7 +2034,7 @@ fun beside-align(yp :: Y-Place, ri1 :: Image, ri2 :: Image) -> Image:
     | y-bottom => fb.height - (sb.height / 2)
   end
   new-c = new-center(i2, xpos, ypos, i1)
-  compound-image(i2,posn(xpos,ypos),i1,new-c).snap-axes()
+  pin-to-bottom(compound-image(i2,posn(xpos,ypos),i1,new-c).snap-axes())
 end
 
 fun beside-align-list(yp :: Y-Place, imgs :: List<Image>) -> Image:
@@ -1900,10 +2043,10 @@ fun beside-align-list(yp :: Y-Place, imgs :: List<Image>) -> Image:
   imgs.rest.foldl(with-yp,imgs.first)
 end
 
-fun above(ri1 :: Image, ri2 :: Image) -> Image:
+fun above(i1 :: Image, i2 :: Image) -> Image:
   doc: "Places the first image above the second, with their centers horizontally aligned"
-  i1 = ri1.remove-pinhole()
-  i2 = ri2.remove-pinhole()
+  #i1 = ri1.clear-pinhole()
+  #i2 = ri2.clear-pinhole()
   i1cb = i1.cornerbox()
   i2cb = i2.cornerbox()
   i1-box = i1cb.to-box()
@@ -1913,7 +2056,7 @@ fun above(ri1 :: Image, ri2 :: Image) -> Image:
   at-y = i1-box.height + i2cb.get-center().y
   at = posn(at-x, at-y)
   new-c = new-center(i2,at.x,at.y,i1)
-  compound-image(i2,at,i1,new-c).snap-axes()
+  pin-to-bottom(compound-image(i2,at,i1,new-c).snap-axes())
 end
 
 fun above-list(imgs :: List<Image>) -> Image:
@@ -1922,10 +2065,10 @@ fun above-list(imgs :: List<Image>) -> Image:
   imgs.rest.foldl(swapped, imgs.first)
 end
 
-fun above-align(xp :: X-Place, ri1 :: Image, ri2 :: Image) -> Image:
+fun above-align(xp :: X-Place, i1 :: Image, i2 :: Image) -> Image:
   doc: "Places the first image above the second, with the given horizontal alignment"
-  i1 = ri1.remove-pinhole()
-  i2 = ri2.remove-pinhole()
+  #i1 = ri1.clear-pinhole()
+  #i2 = ri2.clear-pinhole()
   i1cb = i1.cornerbox()
   i1-box = i1cb.to-box()
   i1-center = i1cb.get-center()
@@ -1939,7 +2082,7 @@ fun above-align(xp :: X-Place, ri1 :: Image, ri2 :: Image) -> Image:
   end
   ypos = i1-box.height + i2-center.y
   new-c = new-center(i2,xpos,ypos,i1)
-  compound-image(i2, posn(xpos, ypos), i1, new-c).snap-axes()
+  pin-to-bottom(compound-image(i2, posn(xpos, ypos), i1, new-c).snap-axes())
 end
 
 fun above-align-list(xp :: X-Place, imgs :: List<Image>) -> Image:
@@ -1961,37 +2104,37 @@ fun colored-empty-scene(x :: Number%(greater-than-zero),
   overlay(make-rectangle(x,y,outline,black), make-rectangle(x,y,solid,k))
 end
 
-fun place-image-topleft(ri1 :: Image, x :: Number, y :: Number, ri2 :: Image) -> Image:
-  i1 = ri1.remove-pinhole()
-  i2 = ri2.remove-pinhole()
+fun place-image-topleft(i1 :: Image, x :: Number, y :: Number, i2 :: Image) -> Image:
+  #i1 = ri1.clear-pinhole()
+  #i2 = ri2.clear-pinhole()
   tb = i1.get-box()
   at = posn((tb.width / 2) + x, (tb.height / 2) + y)
-  clipped-image(compound-image(i1, at, i2, i2.get-center()), false)
+  pin-to-bottom(clipped-image(compound-image(i1, at, i2, i2.get-center()), false))
 end
 
 fun overlay-at(i1 :: Image, x :: Number, y :: Number, i2 :: Image) -> Image:
-  ri1 = i1.remove-pinhole()
-  ri2 = i2.remove-pinhole()
-  compound-image(ri1, posn(x,y), ri2, ri2.get-center())
+  #ri1 = i1.clear-pinhole()
+  #ri2 = i2.clear-pinhole()
+  pin-to-top(compound-image(i1, posn(x,y), i2, i2.get-center()))
 end
 
 fun place-image(i1 :: Image, x :: Number, y :: Number, i2 :: Image) -> Image:
   doc: "Places the first image onto the second, clipping it so that it is no larger than the bottom"
-  ri1 = i1.remove-pinhole()
-  ri2 = i2.remove-pinhole()
-  if not(is-clipped-image(ri2)):
-    clipped-image(compound-image(ri1, posn(x,y), ri2, ri2.get-center()),false)
+  #ri1 = i1.clear-pinhole()
+  #ri2 = i2.clear-pinhole()
+  if not(is-clipped-image(i2)):
+    clipped-image(compound-image(i1, posn(x,y), i2, i2.get-center()),false)
   else:
     # Combine the tops to avoid unneeded mask propogation
-    trans-vec = [vector: ri2.pair.at.x - ri2.pair.top.get-center().x, 
-      ri2.pair.at.y - ri2.pair.top.get-center().y]
-    basis = ri2.pair.top.translate(trans-vec).coord-zero()
+    trans-vec = [vector: i2.pair.at.x - i2.pair.top.get-center().x, 
+      i2.pair.at.y - i2.pair.top.get-center().y]
+    basis = i2.pair.top.translate(trans-vec).coord-zero()
     comb-at = posn(x - basis.x, y - basis.y)
-    new-top = compound-image(ri1, comb-at,ri2.pair.top,new-center(ri1,comb-at.x,comb-at.y,ri2.pair.top))
-    diff-c = posn(ri2.pair.top.get-center().x - new-top.get-center().x, 
-                  ri2.pair.top.get-center().y - new-top.get-center().y)
-    new-at = posn(ri2.pair.at.x - diff-c.x, ri2.pair.at.y - diff-c.y)
-    clipped-image(compound-image(new-top, new-at, ri2.pair.bottom, ri2.pair.get-center()),ri2.hidden-mask)
+    new-top = pin-to-bottom(compound-image(i1, comb-at,i2.pair.top,new-center(i1,comb-at.x,comb-at.y,i2.pair.top)))
+    diff-c = posn(i2.pair.top.get-center().x - new-top.get-center().x, 
+                  i2.pair.top.get-center().y - new-top.get-center().y)
+    new-at = posn(i2.pair.at.x - diff-c.x, i2.pair.at.y - diff-c.y)
+    pin-to-bottom(clipped-image(compound-image(new-top, new-at, i2.pair.bottom, i2.pair.get-center()),i2.hidden-mask))
   end
 end
 
@@ -2334,6 +2477,7 @@ fun draw-prerendered-svg(i :: Image, fit-all :: Boolean) -> List<XML.Element>:
       dy = if fit-all: num-max(0, bottom.snap-vec().get(1)) else: 0 end
       # basis needed for translating from relative positioning
       # to absolute positioning
+      i-center = i.get-center()
       basis = bottom.coord-zero()
       top-basis = top.coord-zero()
       true-at = posn(at.x + basis.x, at.y + basis.y)
@@ -2345,7 +2489,19 @@ fun draw-prerendered-svg(i :: Image, fit-all :: Boolean) -> List<XML.Element>:
       mid-trans-bot = bottom.translate([vector: top-dx, dy + top-dy])
       mtrans-cb = mid-trans-top.cornerbox().join(mid-trans-bot.cornerbox())
       mtrans-center = mtrans-cb.get-center()
-      center-vec = if fit-all: [vector: num-max(0, pin.x - mtrans-center.x), num-max(0, pin.y - mtrans-center.y)] else: [vector: 0, 0] end
+      center-vec = if fit-all: [vector: num-max(0, i-center.x - mtrans-center.x), num-max(0, i-center.y - mtrans-center.y)] else: [vector: 0, 0] end
+      # print('[draw-prerendered-svg start]')
+      # print('at            : ' + torepr(at))
+      # print('pin           : ' + torepr(pin))
+      # print('basis         : ' + torepr(basis))
+      # print('true-at       : ' + torepr(true-at))
+      # print('top-vec       : ' + torepr(top-vec))
+      # print('top-dx        : ' + torepr(top-dx))
+      # print('top-dy        : ' + torepr(top-dy))
+      # print('mtrans-cb     : ' + torepr(mtrans-cb))
+      # print('mtrans-center : ' + torepr(mtrans-center))
+      # print('center-vec    : ' + torepr(center-vec))
+      # print('[draw-prerendered-svg end]') 
       draw-prerendered-svg(mid-trans-bot.translate(center-vec), fit-all).append(
         draw-prerendered-svg(mid-trans-top.translate(center-vec), fit-all))
       
@@ -2394,18 +2550,28 @@ fun draw-svg(i :: Image) -> XML.Element:
   b = i.svg-size()
   ht = XML.attribute("height", num-exact(b.height))
   wd = XML.attribute("width", num-exact(b.width))
+  i-pin = i.get-pinhole()
+  ibox = i.get-box()
+  maybe-pin-svg = if is-explicit-posn(i-pin): 
+      svg-pinhole-lines(i-pin, ibox.width, ibox.height) 
+    else:
+      XML.tag("g", empty, empty)
+    end
   attrs = 
   if ((is-polygon(i) or is-bezier-shape(i)) and (i.mode == outline)): 
     [list: wd, ht, XML.attribute("style", "overflow:visible;")]
   else:
     [list: wd, ht]
   end
-  XML.tag("svg", attrs, pre)
+  # Append to make sure that the pinhole is on top
+  XML.tag("svg", attrs, pre.append([list: maybe-pin-svg]))
 end
 
 fun draw-debug(i :: Image) -> XML.Element:
   cb = i.cornerbox()
+  #i-pin = i.get-pinhole()
   cb-as-box = cb.to-box()
+  #pinhole-svg = svg-pinhole-lines(i-pin, cb-as-box.width, cb-as-box.height)
   shadow frame = raw-svg-rect(cb.top-left, cb-as-box.width, cb-as-box.height)
   center-dot = raw-svg-dot(i.get-center())
   cases(XML.Element) draw-svg(i):

@@ -13,6 +13,9 @@
 
 provide {
   posn : posn,
+  explicit-posn : explicit-posn,
+  is-posn : is-posn,
+  is-explicit-posn : is-explicit-posn,
   box  : box,
   ivl  : ivl
 } end
@@ -22,6 +25,7 @@ provide-types *
 data Position:
   | posn(x :: Number,
          y :: Number)
+  | explicit-posn(x :: Number, y :: Number)
 end
 
 # Represents a rectangular size

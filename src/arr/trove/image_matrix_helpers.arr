@@ -155,7 +155,11 @@ end
 # So centers can stay consistent
 fun translate-posn(p :: IM_AUX.Position, v :: M.Vector%(length2)) -> IM_AUX.Position:
   doc: "Translates the given position by the given vector"
-  IM_AUX.posn(p.x + v.get(0), p.y + v.get(1))
+  if IM_AUX.is-explicit-posn(p):
+    IM_AUX.explicit-posn(p.x + v.get(0), p.y + v.get(1))
+  else:
+    IM_AUX.posn(p.x + v.get(0), p.y + v.get(1))
+  end
 where:
   translate-posn(IM_AUX.posn(10,20), [vector: 2, 3]) is IM_AUX.posn(12,23)
 end
@@ -204,13 +208,21 @@ end
 fun transform-posn(m :: M.Matrix, p :: IM_AUX.Position):
   doc: "Returns the given Position after transforming it with the given matrix"
   trans = (to-homogeneous(m) * [matrix(3,1): p.x, p.y, 1]).submatrix([list:0],[list:0,1]).to-list()
-  IM_AUX.posn(trans.get(0),trans.get(1))
+  if IM_AUX.is-explicit-posn(p):
+    IM_AUX.explicit-posn(trans.get(0), trans.get(1))
+  else:
+    IM_AUX.posn(trans.get(0),trans.get(1))
+  end
 end
 
 fun transform-posn-about(m :: M.Matrix, p :: IM_AUX.Position, abt :: IM_AUX.Position):
   doc: "Transforms the given position using the given matrix about the given point"
   temp = transform-posn(m, IM_AUX.posn(p.x - abt.x, p.y - abt.y))
-  IM_AUX.posn(temp.x + abt.x, temp.y + abt.y)
+  if IM_AUX.is-explicit-posn(p):
+    IM_AUX.explicit-posn(temp.x + abt.x, temp.y + abt.y)
+  else:
+    IM_AUX.posn(temp.x + abt.x, temp.y + abt.y)
+  end
 end
 
 fun affine-transform-matrix(transformation :: M.Matrix%(matrix2d), to-trans :: M.Matrix, m-center :: IM_AUX.Position) -> M.Matrix:

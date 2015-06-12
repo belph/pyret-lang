@@ -84,7 +84,37 @@
          (arity 1)
          (args ("self"))
          (return ,N)
-         (contract (a-arrow ,I ,N))))))))
+         (contract (a-arrow ,I ,N)))
+        (method-spec
+         (name "put-pinhole")
+         (arity 3)
+         (args ("self" "x" "y"))
+         (return ,I)
+         (contract (a-arrow ,I ,N ,N ,I)))
+        (method-spec
+         (name "clear-pinhole")
+         (arity 1)
+         (args ("self"))
+         (return ,I)
+         (contract (a-arrow ,I ,I)))
+        (method-spec
+         (name "pinhole-x")
+         (arity 1)
+         (args ("self"))
+         (return ,A)
+         (contract (a-arrow ,I ,A)))
+        (method-spec
+         (name "pinhole-y")
+         (arity 1)
+         (args ("self"))
+         (return ,A)
+         (contract (a-arrow ,I ,A)))
+        (method-spec
+         (name "center-pinhole")
+         (arity 1)
+         (args ("self"))
+         (return ,I)
+         (contract (a-arrow ,I ,I))))))))
 
 
 @(define (image-method name #:args (args #f) #:return (return #f) #:contract (contract #f) . body)
@@ -851,9 +881,18 @@ Rotates the image by the given @pyret{theta} degrees counterclockwise.
                          "ellipse(60, 20, solid, olivedrab).rotate(45)"
                          "ellipse(60, 20, solid, olivedrab).rotate(45).rotate(-45)"
                          "ellipse(60, 20, solid, olivedrab).rotate(30).scale-x(2).rotate(60)"
+                         "ellipse(60, 20, solid, olivedrab).rotate(30).scale-x(2)"
+                         "ellipse(60, 20, solid, olivedrab).rotate(30).scale-x(2).rotate(0)"
+                         "ellipse(60, 20, solid, olivedrab).rotate(30).scale-x(2).rotate(30)"
                          "rectangle(50, 50, outline, black).rotate(5)"
                          "beside-align(y-center, rectangle(40, 20, solid, darkseagreen),
-             rectangle(20, 100, solid, darkseagreen)).rotate(45)"]}
+             rectangle(20, 100, solid, darkseagreen)).rotate(45)"
+                         "beside-align(y-center, rectangle(40, 20, solid, darkseagreen),
+             rectangle(20, 100, solid, darkseagreen))"
+                "beside-align(y-center, rectangle(40, 20, solid, darkseagreen),
+             rectangle(20, 100, solid, darkseagreen)).rotate(0)"
+                "beside-align(y-center, rectangle(40, 20, solid, darkseagreen),
+             rectangle(20, 100, solid, darkseagreen)).rotate(45/2)"]}
 
 @image-method["crop"]{
 
@@ -909,5 +948,64 @@ check:
   overlay(circle(20, solid, orange), circle(30, solid, purple)).height() is 60
   rectangle(10, 0, solid, purple).height() is 0
 end}}
+
+@section{Pinholes}
+
+@image-method["center-pinhole"]{
+Creates a pinhole in the image's center.
+@image-examples[#:racket (center-pinhole (rectangle 40 20 "solid" "red"))
+                         "rectangle(40, 20, solid, red).center-pinhole()"
+                         "rectangle(40, 20, solid, orange).center-pinhole().rotate(30)"]}
+
+@image-method["put-pinhole"]{
+Creates a pinhole in the image at the point (@pyret{x}, @pyret{y}).
+@image-examples[#:racket (put-pinhole 2 18 (rectangle 40 20 "solid" "forestgreen"))
+                         "rectangle(40, 20, solid, forestgreen).put-pinhole(2, 18)"]}
+
+@image-method["pinhole-x"]{
+Returns the x coordinate of the image's pinhole
+@examples{
+check:
+  rectangle(10, 10, solid, red).center-pinhole().pinhole-x() is 5
+  rectangle(10, 10, solid, red).pinhole-x() is false
+end}}
+
+@image-method["pinhole-y"]{
+Returns the y coordinate of the image's pinhole
+@examples{
+check:
+  rectangle(10, 10, solid, red).center-pinhole().pinhole-x() is 5
+  rectangle(10, 10, solid, red).pinhole-y() is false
+end}}
+
+@image-method["clear-pinhole"]{Removes the pinhole from the image (if it has one).}
+
+@function["overlay-pinhole"]{
+Overlays all of the image arguments on their pinholes.
+If any of the arguments do not have pinholes, then the center of the image is used instead.
+@image-examples[#:racket (overlay/pinhole
+                          (put-pinhole 25 10 (ellipse 100 50 "solid" "red"))
+                          (put-pinhole 75 40 (ellipse 100 50 "solid" "blue")))
+                "overlay-pinhole(ellipse(100, 50, solid, red).put-pinhole(25, 10),
+                ellipse(100, 50, solid, blue).put-pinhole(75, 40))"
+                "overlay-pinhole(circle(30, solid, yellow),
+                overlay-pinhole(ellipse(100, 40, solid, purple).put-pinhole(20, 20).rotate(60 * 0),
+                overlay-pinhole(ellipse(100, 40, solid, purple).put-pinhole(20, 20).rotate(60 * 1),
+                overlay-pinhole(ellipse(100, 40, solid, purple).put-pinhole(20, 20).rotate(60 * 2),
+                overlay-pinhole(ellipse(100, 40, solid, purple).put-pinhole(20, 20).rotate(60 * 3),
+                overlay-pinhole(ellipse(100, 40, solid, purple).put-pinhole(20, 20).rotate(60 * 4),
+                ellipse(100, 40, solid, purple).put-pinhole(20, 20).rotate(60 * 5))))))).clear-pinhole()"]}
+
+@function["underlay-pinhole"]{
+Underlays all of the image arguments on their pinholes.
+If any of the arguments do not have pinholes, then the center of the image is used instead.
+@image-examples[#:racket (underlay/pinhole
+                          (put-pinhole 25 10 (ellipse 100 50 "solid" "red"))
+                          (put-pinhole 75 40 (ellipse 100 50 "solid" "blue")))
+                         "underlay-pinhole(ellipse(100, 50, solid, red).put-pinhole(25, 10),
+                 ellipse(100, 50, solid, blue).put-pinhole(75, 40))"]}
+
+
+
 
 }
