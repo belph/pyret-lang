@@ -847,17 +847,7 @@ data Image:
     end,
     
     cornerbox(self) -> CornerBox:
-      if (self.matrix.cols > 4):
-        bez-corner-box(matrix-to-posns(self.matrix))
-      else if (self.matrix.cols == 4):
-        IM_MTX.cubic-bezier-bounding-box(
-          posn(self.matrix.get(0,0),self.matrix.get(1,0)),
-          posn(self.matrix.get(0,1),self.matrix.get(1,1)),
-          posn(self.matrix.get(0,2),self.matrix.get(1,2)),
-          posn(self.matrix.get(0,3),self.matrix.get(1,3)))
-      else:
-        raise('Invalid bezier curve matrix: ' + torepr(self.matrix))
-      end
+      bez-corner-box(matrix-to-posns(self.matrix))
     end
     
     
@@ -2347,12 +2337,7 @@ fun draw-prerendered-svg(i :: Image, fit-all :: Boolean) -> List<XML.Element>:
       basis = bottom.coord-zero()
       top-basis = top.coord-zero()
       true-at = posn(at.x + basis.x, at.y + basis.y)
-      pre-trans-top = if (is-clipped-image(top)): 
-      top.translate([vector: (true-at.x - top.pair.get-pinhole().x), 
-            (true-at.y - top.pair.get-pinhole().y) + dy]) 
-      else: top.translate([vector: (true-at.x - top.get-pinhole().x), 
-            (true-at.y - top.get-pinhole().y) + dy]) 
-      end
+      pre-trans-top = top.translate([vector: (true-at.x - top.get-center().x), (true-at.y - top.get-center().y) + dy])
       top-vec = if fit-all: pre-trans-top.snap-vec() else: [vector: 0, 0] end
       top-dx = num-max(0, top-vec.first)
       top-dy = num-max(0, top-vec.get(1))
@@ -2370,12 +2355,8 @@ fun draw-prerendered-svg(i :: Image, fit-all :: Boolean) -> List<XML.Element>:
       dy = if fit-all: num-max(0, pair.bottom.snap-vec().get(1)) else: 0 end
       basis = pair.bottom.coord-zero()
       true-at = posn(pair.at.x + basis.x, pair.at.y + basis.y)
-      trans-top = if (is-clipped-image(pair.top)): 
-      pair.top.translate([vector: true-at.x - pair.top.pair.get-pinhole().x, 
-            (true-at.y - pair.top.pair.get-pinhole().y) + dy]) 
-      else: pair.top.translate([vector: true-at.x - pair.top.get-pinhole().x, 
-            (true-at.y - pair.top.get-pinhole().y) + dy]) 
-      end
+      trans-top = pair.top.translate([vector: (true-at.x - pair.top.get-center().x), 
+                                              (true-at.y - pair.top.get-center().y) + dy])
       if not(hide-bottom):
         [list: clip.defs] + map(clip-add, draw-prerendered-svg(pair.bottom.translate([vector: 0, dy]), fit-all).append(draw-prerendered-svg(trans-top, false)))
       else:
