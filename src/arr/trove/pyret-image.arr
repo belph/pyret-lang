@@ -951,7 +951,11 @@ fun abstract-simple-shape(mtrix :: M.Matrix, mode :: Mode, color :: Color, pinho
     cornerbox : cornerbox-caller,
     get-center : get-center-caller,
     get-pinhole : get-pinhole-caller,
-    get-mode : get-mode-caller
+    get-mode : get-mode-caller,
+    matrix : mtrix,
+    mode : mode,
+    color : color,
+    pinhole : pinhole
   }
 
   extend-with-public(_super, extended-self, new-pubs)
@@ -1141,7 +1145,11 @@ fun compound-image(top :: Image, at :: Position, bottom :: Image, pinhole :: Pos
     get-center : get-center-caller,
     get-pinhole : get-pinhole-caller,
     _match : compound-image-match,
-    image-type : image-type-caller
+    image-type : image-type-caller,
+    top : top,
+    at : at,
+    bottom : bottom,
+    pinhole : pinhole
   }
 
   ret = extend-with-public(_super, extended-self, new-pubs)
@@ -1152,9 +1160,10 @@ constructors := constructors.{compound-image : compound-image}
 fun clipped-image(pair :: Image, hidden-mask :: Boolean) -> Image:
   _super = abstract-image()
   pprot = pair.intref(PKEY).get-self()
+  pair-bottom = pprot.bottom.intref(PKEY).get-self()
 
   
-  shadow cornerbox = custom-match(pair, {compound-image : lam(iref, top, at, bot, pin): bot.intref(PKEY).get-self().cornerbox() end})
+  shadow cornerbox = pair-bottom.cornerbox()
   center = cornerbox.get-center()
   this-box = cornerbox.to-box()
   snapvec = pprot.snap-vec()
@@ -1196,8 +1205,7 @@ fun clipped-image(pair :: Image, hidden-mask :: Boolean) -> Image:
   put-pinhole-caller = put-pinhole-impl(_super.get-self(), _, _)
 
   fun clear-pinhole-impl(self) -> Image:
-    new-ci = custom-match(pair, {compound-image : lam(iref, top, at, bot, pin): 
-      compound-image(top, at, bot, bot.intref(PKEY).get-self().get-center()) end})
+    new-ci = compound-image(pprot.top, pprot.at, pprot.bot, pair-bottom.get-center())
     clipped-image(new-ci, hidden-mask)
   end
   clear-pinhole-caller = no-arg-caller(_super, clear-pinhole-impl)
@@ -1213,8 +1221,7 @@ fun clipped-image(pair :: Image, hidden-mask :: Boolean) -> Image:
   get-center-caller = no-arg-caller(_super, get-center-impl)
 
   fun get-pinhole-impl(self) -> Position:
-    custom-match(pair, {compound-image : lam(iref, top, at, bot, pin): 
-      pin end})
+    pprot.pinhole
   end
   get-pinhole-caller = no-arg-caller(_super, get-pinhole-impl)
 
@@ -1245,7 +1252,9 @@ fun clipped-image(pair :: Image, hidden-mask :: Boolean) -> Image:
     get-center : get-center-caller,
     get-pinhole : get-pinhole-caller,
     _match : clipped-image-match,
-    image-type : image-type-caller
+    image-type : image-type-caller,
+    pair : pair,
+    hidden-mask : hidden-mask
   }
 
   ret = extend-with-public(_super, extended-self, new-pubs)
@@ -1957,24 +1966,18 @@ fun place-image(i1 :: Image, x :: Number, y :: Number, i2 :: Image) -> Image:
   else:
     # Combine the tops to avoid unneeded mask propogation
     i2-int = i2.intref(PKEY).get-self()
-    fun compound-image-info(iref, top, at, bottom, pin):
-      {top : top, at : at, bottom : bottom, pin : pin, center : iref.get-center()}
-    end
-    fun clipped-image-info(iref, pair, hidden):
-      {pair : custom-match(pair, {compound-image : compound-image-info}), hidden-mask : hidden}
-    end
-    i2-info = i2-int._match({clipped-image : clipped-image-info}, lam(): raise('Internal error: place-image') end)
-    i2-top = i2-info.pair.top.intref(PKEY).get-self()
-    trans-vec = [vector: i2-info.pair.at.x - i2-top.get-center().x, 
-      i2-info.pair.at.y - i2-top.get-center().y]
+    i2-pair = i2-int.pair.intref(PKEY).get-self()
+    i2-top = i2-pair.top.intref(PKEY).get-self()
+    trans-vec = [vector: i2-pair.at.x - i2-top.get-center().x, 
+      i2-pair.at.y - i2-top.get-center().y]
     basis = i2-top.translate(trans-vec).intref(PKEY).get-self().coord-zero()
     comb-at = posn(x - basis.x, y - basis.y)
-    new-top = pin-to-bottom(compound-image(i1, comb-at, i2-info.pair.top, new-center(i1, comb-at.x, comb-at.y, i2-info.pair.top)))
+    new-top = pin-to-bottom(compound-image(i1, comb-at, i2-pair.top, new-center(i1, comb-at.x, comb-at.y, i2-pair.top)))
     new-top-int = new-top.intref(PKEY).get-self()
     diff-c = posn(i2-top.get-center().x - new-top-int.get-center().x, 
                   i2-top.get-center().y - new-top-int.get-center().y)
-    new-at = posn(i2-info.pair.at.x - diff-c.x, i2-info.pair.at.y - diff-c.y)
-    pin-to-bottom(clipped-image(compound-image(new-top, new-at, i2-info.pair.bottom, i2-info.pair.center), i2-info.hidden-mask))
+    new-at = posn(i2-pair.at.x - diff-c.x, i2-pair.at.y - diff-c.y)
+    pin-to-bottom(clipped-image(compound-image(new-top, new-at, i2-pair.bottom, i2-pair.get-center()), i2-int.hidden-mask))
   end
 end
 
@@ -2182,7 +2185,7 @@ fun draw-polygon(img :: Image%(is-polygon)) -> XML.Element:
   fun extract-polygon-info(iref, mtx, mode, color, pin):
     {matrix : mtx, mode : mode, color : color, pin : pin}
   end
-  i = img.intref(PKEY).get-self()._match({polygon : extract-polygon-info}, lam(): raise('Internal error: draw-polygon') end)
+  i = img.intref(PKEY).get-self()
   points = XML.attribute("points", XML.atomic(for fold(acc from "", p from matrix-to-posns(i.matrix)):
     acc + point-to-string(p)
   end))
@@ -2216,7 +2219,7 @@ fun draw-bezier-shape(img :: Image%(is-bezier-shape)) -> XML.Element:
   fun extract-bezier-info(iref, mtx, mode, color, pin):
     {matrix : mtx, mode : mode, color : color, pin : pin}
   end
-  i = img.intref(PKEY).get-self()._match({bezier-shape : extract-bezier-info}, lam(): raise('Internal error: draw-bezier-shape') end)
+  i = img.intref(PKEY).get-self()
 
   raw-pts = matrix-to-posns(i.matrix)
    
@@ -2236,7 +2239,7 @@ fun wrap-and-name(prefix :: Number, n :: Number, elt :: XML.Element) -> XML.Elem
   XML.tag("clipPath", [list: id-str], [list: new-elt])
 end
 
-fun get-clip-intersect(prefix :: Number, clips :: List<XML.Element>, width :: Number, height :: Number) -> List<XML.Element>:
+fun get-clip-union(prefix :: Number, clips :: List<XML.Element>, width :: Number, height :: Number) -> List<XML.Element>:
   len = clips.length()
   when len == 0:
     raise("Cannot clip image without clip")
@@ -2252,14 +2255,9 @@ fun get-clip-intersect(prefix :: Number, clips :: List<XML.Element>, width :: Nu
         XML.attribute("height",XML.atomic(height)), 
         XML.attribute("xlink:href",XML.atomic("#" + shape-id(num)))], empty) 
   end
-  if len == 1:
-    [list: XML.tag("clipPath", [list: id-att(0)], [list: use-tag(0)])]
-  else:
-    start = XML.tag("clipPath", [list: id-att(len - 2), first-path-att(len - 1)], [list: use-tag(len - 2)])
-    (for fold(acc from [list: start], n from range(0,len - 2).reverse()):
-        link(XML.tag("clipPath", [list: id-att(n), path-att(n + 1)], [list: use-tag(n)]), acc)
-      end).reverse()
-  end
+  main-id = id-att(0)
+  contents = range(0, num-max(1, len - 2)).map(use-tag)
+  [list: XML.tag("clipPath", [list: main-id], contents)]
 end
 
 data ClipInfo:
@@ -2278,16 +2276,16 @@ fun get-clip(img :: Image%(is-clipped-image), fit-all :: Boolean) -> ClipInfo:
   fun extract-compound-bottom(iref, top, at, bottom, pin):
     bottom
   end
-  i = img.intref(PKEY).get-self()._match({clipped-image : extract-clipped-info}, lam(): raise('Internal error: get-clip (1)') end)
-  i-bottom = i.pair.intref(PKEY).get-self()._match({compound-image : extract-compound-bottom}, 
-    lam(): raise('Internal error: get-clip (2)') end)
-  bbox = i.pair.intref(PKEY).get-self().get-box()
+  i = img.intref(PKEY).get-self()
+  i-pair = i.pair.intref(PKEY).get-self()
+  i-bottom = i-pair.bottom
+  bbox = i-pair.get-box()
   shapes = draw-prerendered-svg(i-bottom, fit-all)
   prefix = num-random(10000) # TODO: Find a better way to avoid n.s. collisions
   wrapped = for map2(n from range(0,shapes.length()), elt from shapes):
     wrap-and-name(prefix, n, elt)
   end
-  defs = XML.tag("defs", empty, wrapped + get-clip-intersect(prefix, wrapped, bbox.width, bbox.height))
+  defs = XML.tag("defs", empty, wrapped + get-clip-union(prefix, wrapped, bbox.width, bbox.height))
   to-use = defs.elts.last().attributes.first.value.val # That's a mouthful
   clip-pair(defs, "url(#" + to-use + ")")
 end
@@ -2323,7 +2321,8 @@ fun draw-prerendered-svg(i :: Image, fit-all :: Boolean) -> List<XML.Element>:
     fun extract-compound-info(icref, top, at, bottom, pin):
       {top : top.intref(PKEY).get-self(), at : at, bottom : bottom.intref(PKEY).get-self(), pin : pin}
     end
-    pair = rawpair.intref(PKEY).get-self()._match({compound-image : extract-compound-info}, lam(): raise('Internal error: draw-prerendered-svg') end)
+    pair-prot = rawpair.intref(PKEY).get-self()
+    pair = extract-compound-info(pair-prot, pair-prot.top, pair-prot.at, pair-prot.bottom, pair-prot.pinhole)
     dy = if fit-all: num-max(0, pair.bottom.snap-vec().get(1)) else: 0 end
     basis = pair.bottom.coord-zero()
     true-at = posn(pair.at.x + basis.x, pair.at.y + basis.y)
