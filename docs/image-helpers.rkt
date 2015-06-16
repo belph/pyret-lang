@@ -27,6 +27,7 @@
 (provide USE-PYRET
          racket-comment
          process-examples
+         respace-example
          prettify/pyret)
 
 (define DEBUG-IMAGES #t)
@@ -259,4 +260,22 @@
                                    (deep-map/splice f (cdr lst)))]
           [else (smartcons (f (car lst)) (deep-map/splice f (cdr lst)))]))
   (deep-map/splice (λ(s)(format "~a" s)) raw-read))
+
+(define (trim-max n str)
+  (define pattern (pregexp (format "^\\s{,~a}(.*)$" n)))
+  (define (trim s)
+    (regexp-replace pattern s "\\1"))
+  (define split-up (string-split str "\n"))
+  (string-join (cons (car split-up)
+                     (map trim (cdr split-up))) "\n"))
+
+(define (respace-example stx)
+  ;; This if is needed since the source location
+  ;; may be dropped when preprocessing is finished
+  ;; (which is okay, because this will have been
+  ;;  called already by then)
+  (if (syntax-column stx)
+      (datum->syntax stx (trim-max (add1 (syntax-column stx))
+                                   (syntax->datum stx)))
+      stx))
   

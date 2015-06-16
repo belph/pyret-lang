@@ -61,7 +61,7 @@
          (fixargstr (regexp-replace* #rx" \\(unquote ([-A-Za-z0-9]*)\\)"
                                     argstr ", \\1"))
          (retstr  (format "~a~a" namestr fixargstr)))
-    (datum->syntax name retstr)))
+    (datum->syntax name retstr name)))
 
 (begin-for-syntax
   (define-splicing-syntax-class rkt-equiv
@@ -115,14 +115,14 @@
     (quasisyntax/loc racket
       (element #f (list (hspace 4) #,pyret-img))))
   (if (syntax->datum racket) ;; racket != #f
-      (quasisyntax/loc racket
+      (quasisyntax/loc pyret-str
         (element #f (list equiv-str
                           #,(pyret-example pyret-str)
                           #,spaced-pyret-img)))
       (if pyret-img
-          #`(element #f (list #,(pyret-example pyret-str)
-                              #,spaced-pyret-img))
-          #`(element #f #,(pyret-example pyret-str))))))
+          (quasisyntax/loc pyret-str (element #f (list #,(pyret-example pyret-str)
+                                                       #,spaced-pyret-img)))
+          (quasisyntax/loc pyret-str (element #f #,(pyret-example pyret-str)))))))
 
 (define-for-syntax (make-image-example racket pyret-str pyret-img)
   (define racket-equiv? (not (equal? (syntax->datum racket) #f)))
@@ -132,7 +132,7 @@
                                                           (string-join (racket-comment
                                                                         (syntax->datum racket))
                                                                        "\n"))) (list))]
-                [pyret-str (pyret-example (prettify/pyret (syntax->datum pyret-str)))]
+                [pyret-str (pyret-example (syntax->datum pyret-str))]
                 [(pyret-img ...) (if has-image? (list (quasisyntax/loc racket
                                                         (element #f (list (hspace 4) #,pyret-img)))) (list))])
     (syntax/loc racket
@@ -172,11 +172,14 @@
   (syntax-parse stx
     [() (values '() '())]
     [(frst:img-example rst ...)
-     (let-values (((lst acc) (image-examples->placeholders #'(rst ...)))
+     (let-values (((lst acc) (image-examples->placeholders (syntax/loc #'frst (rst ...))))
                   ((plac) (make-placeholder #f)))
+       
        (values (if (syntax->datum #'frst.rkt) ;; If a racket equivalent was given
-                   (list* #'#:racket #'frst.rkt #'frst.pyret plac lst)
-                   (list* #'frst.pyret plac lst))
+                   (list* (syntax/loc #'frst.pyret #:racket)
+                          (syntax/loc #'frst.pyret frst.rkt)
+                          (syntax/loc #'frst.pyret frst.pyret) plac lst)
+                   (list* (syntax/loc #'frst.pyret frst.pyret) plac lst))
                (cons (cons plac (syntax->datum #'frst.pyret)) acc)))]
     [else (raise-syntax-error #f "Invalid example" stx)]))
 
@@ -212,7 +215,6 @@
          (if (tick-mod) (eprintf ".") (void))
          (let-values (((rst acc) (get-placeholders (stx-cdr stx) acc))
                       ((fst facc) (image-examples->placeholders (stx-cdr (stx-car stx)))))
-           
            (values
             (cons (cons #'image-examples fst) rst)
             (append facc acc)))]
@@ -257,10 +259,14 @@
   (if USE-PYRET
       (syntax-parse stx
         [(ex:postproc-img-example)
-         (make-image-example #'ex.rkt #'ex.pyretstr #'ex.img)])
+         (make-image-example (syntax/loc stx ex.rkt)
+                             (respace-example (syntax/loc stx ex.pyretstr))
+                             (syntax/loc stx ex.img))])
       (syntax-parse stx
         [(ex:img-example)
-         (make-image-example #'ex.rkt #'ex.pyretstr #'ex.rkt)])))
+         (make-image-example (syntax/loc stx ex.rkt)
+                             (respace-example (syntax/loc stx ex.pyretstr))
+                             (syntax/loc stx ex.rkt))])))
          
 
 (define-syntax (image-examples stx)
@@ -269,16 +275,16 @@
         (syntax-parse stx
           [(ex:postproc-img-example rst ...)
            (quasisyntax/loc stx
-             (#,(parse-image-example #'ex) #,@(do-example-parses #'(rst ...))))]
+             (#,(parse-image-example (syntax/loc stx ex)) #,@(do-example-parses (syntax/loc stx (rst ...)))))]
           [() stx])
         (syntax-parse stx
           [(ex:img-example rst ...)
            (quasisyntax/loc stx
-             (#,(parse-image-example #'ex) #,@(do-example-parses #'(rst ...))))])))
+             (#,(parse-image-example (syntax/loc stx ex)) #,@(do-example-parses #'(rst ...))))])))
   (syntax-parse stx
     [(examples:image-examples-stx)
-     (let ((example-parses (do-example-parses #'examples.contents)))
-     #`(nested
+     (let ((example-parses (do-example-parses (syntax/loc stx examples.contents))))
+     (quasisyntax/loc stx (nested
         #:style (make-style "examples" (cons (make-alt-tag "div") (list "style.css")))
                (para (bold "Examples:"))
-               #,@example-parses))]))
+               #,@example-parses)))]))
