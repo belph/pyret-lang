@@ -1,6 +1,6 @@
 #lang racket/base
 (require "../scribble-api.rkt")
-(provide A N No B S EQ RA Ar RA-of A-of L L-of O-of S-of E-of P-of)
+(provide A N No B S F EQ RA Ar RA-of A-of L L-of O-of S-of E-of P-of)
 
 (define A (a-id "Any" (xref "<global>" "Any")))
 (define N (a-id "Number" (xref "<global>" "Number")))
@@ -8,6 +8,7 @@
 (define B (a-id "Boolean" (xref "<global>" "Boolean")))
 (define S (a-id "String" (xref "<global>" "String")))
 (define RA (a-id "RawArray" (xref "<global>" "RawArray")))
+(define F (a-id "Function" (xref "<global>" "Function")))
 (define Ar (a-id "Array" (xref "arrays" "Array")))
 (define EQ (a-id "EqualityResult" (xref "equality" "EqualityResult")))
 (define L (a-id "List" (xref "lists" "List")))
