@@ -35,6 +35,7 @@
          data-spec2
          method-doc
          method-spec
+         opaque-field-doc
          variants
          collection-doc
          constructor-spec
@@ -443,6 +444,28 @@
       spec name
       (list 'part (tag-name (curr-module-name) var-name name))
       contract return args alt-docstrings examples body)))
+
+@(define (opaque-field-doc parent name
+                           #:ann (type #f)
+                           #:examples (examples '()) . contents)
+   (define part-tag (list 'part (tag-name (curr-module-name) parent name)))
+   (define name-tt (tt parent "." name))
+   (define name-elt (toc-target-element code-style (list name-tt) part-tag))
+   (define header-part
+     (apply para #:style (div-style "boxed pyret-header")
+            (list (if type
+                      (tt name-elt " :: " type)
+                      (tt name-elt)))))
+   (nested #:style (div-style "function")
+           (cons header-part
+                 (interleave-parbreaks/all
+                  (append
+                   (list (nested #:style (div-style "description") contents))
+                   (list (if (andmap whitespace? examples)
+                             (nested #:style (div-style "examples") "")
+                             (nested #:style (div-style "examples")
+                                     (para (bold "Examples:"))
+                                     (apply pyret-block examples)))))))))
 @(define (member-spec name #:type (type-in #f) #:contract (contract-in #f) . body)
    (let* ([members (get-defn-field 'members (curr-var-spec))]
           [member (if (list? members) (assoc name members) #f)]

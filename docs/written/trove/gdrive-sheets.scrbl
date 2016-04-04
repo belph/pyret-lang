@@ -14,6 +14,10 @@
    (method-doc "Spreadsheet" "spreadsheet" name #:alt-docstrings "" #:args args #:return return #:contract contract))
 @(define (worksheet-method name #:args (args #f) #:return (return #f) #:contract (contract #f))
    (method-doc "Worksheet" "worksheet" name #:alt-docstrings "" #:args args #:return return #:contract contract))
+@(define (spreadsheet-field name #:ann (type #f))
+   (opaque-field-doc "Spreadsheet" name #:ann type))
+@(define (worksheet-field name #:ann (type #f))
+   (opaque-field-doc "Worksheet" name #:ann type))
 
 @; NOTE: This spreadsheet should be publicly shared!
 @(define example-sheet-id "10ds2lMAGmp69zz3mPAP_jrTsi2TKS5HbmujacvLUcuQ")
@@ -216,6 +220,20 @@ check:
 end
 }
 
+@section{Spreadsheet Fields}
+
+@spreadsheet-field["title" #:ann S]
+
+The name of the spreadsheet.
+
+@spreadsheet-field["updated" #:ann S]
+
+The timestamp stating when the last edit to the spreadsheet was made.
+
+@spreadsheet-field["author" #:ann S]
+
+The author of the spreadsheet.
+
 @section{Spreadsheet Methods}
 
 @spreadsheet-method["sheet-by-name"]
@@ -290,6 +308,20 @@ end
 @type-spec["Worksheet" '()]
 
 The @pyret{Worksheet} type represents worksheets contained within @pyret{Spreadsheet}s.
+
+@section{Worksheet Fields}
+
+@worksheet-field["title" #:ann S]
+
+The title of this worksheet.
+
+@worksheet-field["row-count" #:ann N]
+
+The number of rows in the worksheet.
+
+@worksheet-field["col-count" #:ann N]
+
+The number of columns in the worksheet.
 
 @section{Worksheet Methods}
 
