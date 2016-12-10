@@ -85,6 +85,7 @@ j-label = J.j-label
 j-break = J.j-break
 j-while = J.j-while
 j-for = J.j-for
+empty-cached-info = J.empty-cached-info
 make-label-sequence = J.make-label-sequence
 
 is-t-data = T.is-t-data
@@ -194,7 +195,7 @@ fun check-fun(l, f):
 end
 
 fun thunk-app(block):
-  j-app(j-parens(j-fun(cl-empty, block)), cl-empty)
+  j-app(j-parens(j-fun(cl-empty, block, empty-cached-info())), cl-empty)
 end
 
 fun thunk-app-stmt(stmt):
@@ -317,7 +318,7 @@ fun local-bound-vars(kase :: J.JCase, vars) block:
       | j-binop(left, _, right) =>
         e(left)
         e(right)
-      | j-fun(_, _) =>
+      | j-fun(_, _, _) =>
         # the body of a function contributes no *locally* bound vars
         nothing
       | j-new(func, args) =>
@@ -810,7 +811,7 @@ fun compile-cases-branch(compiler, compiled-val, branch :: N.ACasesBranch, cases
         j-expr(j-assign(compiler.cur-step, compiler.cur-target)),
         j-expr(j-assign(compiler.cur-apploc, compiler.get-loc(branch.l))),
         j-var(temp-branch,
-          j-fun(CL.map_list(lam(arg): formal-shadow-name(arg.id) end, branch-args), compiled-branch-fun)),
+          j-fun(CL.map_list(lam(arg): formal-shadow-name(arg.id) end, branch-args), compiled-branch-fun, empty-cached-info())),
         deref-fields,
         j-break]
 
@@ -1141,7 +1142,7 @@ compiler-visitor = {
       [clist:
         j-var(temp,
           j-fun(CL.map_list(lam(arg): formal-shadow-name(arg.id) end, effective-args),
-                compile-fun-body(l, new-step, temp, self, effective-args, some(len), body, true)))])
+                compile-fun-body(l, new-step, temp, self, effective-args, some(len), body, true), empty-cached-info()))])
   end,
   method a-method(self, l :: Loc, name :: String, args :: List<N.ABind>, ret :: A.Ann, body :: N.AExpr):
     step = fresh-id(compiler-name("step"))
@@ -1150,7 +1151,7 @@ compiler-visitor = {
     full-var =
       j-var(temp-full,
         j-fun(CL.map_list(lam(a): formal-shadow-name(a.id) end, args),
-          compile-fun-body(l, step, temp-full, self, args, some(len), body, true)
+          compile-fun-body(l, step, temp-full, self, args, some(len), body, true), empty-cached-info()
         ))
     method-expr = if len < 9:
       rt-method("makeMethod" + tostring(len - 1), [clist: j-id(temp-full), j-str(name)])
@@ -1237,8 +1238,8 @@ compiler-visitor = {
               j-block(
                 arity-check(self.get-loc(loc), 1) +
                 [clist: j-return(rt-method("makeBoolean", [clist: rt-method("hasBrand", [clist: j-id(val), b])]))]
-                )
-              ),
+                ),
+              empty-cached-info()),
             j-str(pred-name + "-Tester")
           ])
         )
@@ -1271,7 +1272,7 @@ compiler-visitor = {
             self.get-loc(l2),
             # NOTE(joe): Thunked at the JS level because compiled-anns might contain
             # references to rec ids that should be resolved later
-            j-fun(cl-empty, j-block1(j-return(j-list(false, compiled-anns.anns)))),
+            j-fun(cl-empty, j-block1(j-return(j-list(false, compiled-anns.anns))), empty-cached-info()),
             j-list(false, compiled-vals),
             j-list(false, compiled-locs),
             j-list(false, CL.map_list(lam(m): j-bool(N.is-a-mutable(m.member-type)) end, members)),
@@ -1317,9 +1318,9 @@ compiler-visitor = {
                   field = get-dict-field(THIS, j-str(m.bind.id.toname()))
                   mask = j-bracket(j-id(refmask-id), j-num(n))
                   rt-method("derefField", [clist: field, j-bool(N.is-a-mutable(m.member-type)), mask])
-                end))]))
+                end))]), empty-cached-info())
           | a-singleton-variant(_, _, _) =>
-            j-fun([clist: f-id], j-block1(j-return(j-app(j-id(f-id), cl-empty))))
+            j-fun([clist: f-id], j-block1(j-return(j-app(j-id(f-id), cl-empty))), empty-cached-info())
         end
 
       refl-ref-fields-mask-id = js-id-of(compiler-name(vname + "_mutablemask"))
@@ -1338,9 +1339,9 @@ compiler-visitor = {
             j-fun([clist: const-id("f")], j-block1(j-return(j-app(j-id(f-id),
                     CL.map_list(lam(m):
                         get-dict-field(THIS, j-str(m.bind.id.toname()))
-                      end, members)))))
+                      end, members)))), empty-cached-info())
           | a-singleton-variant(_, _, _) =>
-            j-fun([clist: const-id("f")], j-block1(j-return(j-app(j-id(f-id), cl-empty))))
+            j-fun([clist: const-id("f")], j-block1(j-return(j-app(j-id(f-id), cl-empty))), empty-cached-info())
         end
 
       fun member-count(shadow v):
@@ -1452,7 +1453,7 @@ fun mk-abbrevs(l):
     j-var(const-id("G"), rt-field("getFieldLoc")),
     j-var(const-id("U"), j-fun([clist: loc, name],
         j-block1(j-expr(j-method(rt-field("ffi"), "throwUninitializedIdMkLoc",
-            [clist: j-id(loc), j-id(name)]))))),
+            [clist: j-id(loc), j-id(name)]))), empty-cached-info())),
     j-var(const-id("M"), j-str(l.source)),
     j-var(const-id("D"), rt-field("undefined"))
   ]
@@ -1720,7 +1721,7 @@ fun compile-module(self, l, imports-in, prog, freevars, provides, env) block:
                 j-block([clist:
                     j-expr(j-bracket-assign(rt-field("modules"), j-str(module-id), j-id(moduleVal))),
                     j-return(j-id(moduleVal))
-                  ])),
+                  ]), empty-cached-info()),
               j-str("Evaluating " + body-name.toname())
         ]))])
   end
@@ -1761,7 +1762,7 @@ fun compile-module(self, l, imports-in, prog, freevars, provides, env) block:
     # NOTE(joe): intentionally empty until we can generate the right
     # type information
     provides-obj = compile-provides(provides)
-    the-module = j-fun([clist: RUNTIME.id, NAMESPACE.id, source-name.id] + input-ids, module-body)
+    the-module = j-fun([clist: RUNTIME.id, NAMESPACE.id, source-name.id] + input-ids, module-body, empty-cached-info())
     [D.string-dict:
       "requires", j-list(true, module-locators-as-js),
       "provides", provides-obj,
@@ -1777,7 +1778,7 @@ fun compile-module(self, l, imports-in, prog, freevars, provides, env) block:
   visited-body = compile-fun-body(l, step, toplevel-name,
     self.{get-loc: get-loc, cur-apploc: apploc, resumer: resumer}, # resumer gets js-id-of'ed in compile-fun-body
     [list: resumer-bind], none, prog, true)
-  toplevel-fun = j-fun([clist: formal-shadow-name(resumer)], visited-body)
+  toplevel-fun = j-fun([clist: formal-shadow-name(resumer)], visited-body, empty-cached-info())
   define-locations = j-var(LOCS, j-list(true, locations))
   module-body = j-block(
 #                    [clist: j-expr(j-str("use strict"))] +

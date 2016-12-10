@@ -17,38 +17,44 @@ import srcloc as SL
 import valueskeleton as VS
 
 type ConcatList = CL.ConcatList
-type NameSet = D.MutableStringDict<A.Name>
-type FrozenNameSet = D.StringDict<A.Name>
+#type NameSet = D.MutableStringDict<A.Name>
+#type FrozenNameSet = D.StringDict<A.Name>
+type NameSet = DSU.NameSet
+type FrozenNameSet = DSU.FrozenNameSet
 
 cl-sing = CL.concat-singleton
 cl-empty = CL.concat-empty
 cl-snoc = CL.concat-snoc
 cl-cons = CL.concat-cons
-ns-empty = D.make-mutable-string-dict
-
-fun difference(s1 :: FrozenNameSet, s2 :: FrozenNameSet) block:
-  s1-unfrozen-copy = s1.unfreeze()
-  remove-overlap-now(s1-unfrozen-copy, s2.unfreeze())
-  s1-unfrozen-copy.freeze()
-end
-
-fun copy-nameset(s :: NameSet) -> NameSet:
-  s.freeze().unfreeze()
-end
-
-# does NOT mutate s1 or s2
-fun difference-now(s1 :: NameSet, s2 :: NameSet) -> NameSet block:
-  s1-copy = copy-nameset(s1)
-  remove-overlap-now(s1-copy, s2)
-  s1-copy
-end
-
-# !mutates s1
-fun remove-overlap-now(s1 :: NameSet, s2 :: NameSet) -> Nothing:
-  for each(k2 from s2.keys-list-now()):
-    s1.remove-now(k2)
-  end
-end
+#ns-empty = D.make-mutable-string-dict
+ns-empty = DSU.ns-empty
+difference = DSU.difference
+copy-nameset = DSU.copy-nameset
+difference-now = DSU.difference-now
+remove-overlap-now = DSU.remove-overlap-now
+#fun difference(s1 :: FrozenNameSet, s2 :: FrozenNameSet) block:
+#  s1-unfrozen-copy = s1.unfreeze()
+#  remove-overlap-now(s1-unfrozen-copy, s2.unfreeze())
+#  s1-unfrozen-copy.freeze()
+#end
+#
+#fun copy-nameset(s :: NameSet) -> NameSet:
+#  s.freeze().unfreeze()
+#end
+#
+## does NOT mutate s1 or s2
+#fun difference-now(s1 :: NameSet, s2 :: NameSet) -> NameSet block:
+#  s1-copy = copy-nameset(s1)
+#  remove-overlap-now(s1-copy, s2)
+#  s1-copy
+#end
+#
+## !mutates s1
+#fun remove-overlap-now(s1 :: NameSet, s2 :: NameSet) -> Nothing:
+#  for each(k2 from s2.keys-list-now()):
+#    s1.remove-now(k2)
+#  end
+#end
 
 data GraphNode:
   | node(_from :: J.Label, _to :: ConcatList<J.Label>, case-body :: J.JCase,

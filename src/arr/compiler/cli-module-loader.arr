@@ -67,6 +67,7 @@ j-label = J.j-label
 j-break = J.j-break
 j-while = J.j-while
 j-for = J.j-for
+empty-cached-info = J.empty-cached-info
 
 clist = C.clist
 
@@ -413,7 +414,7 @@ fun build-require-standalone(path, options):
       j-app(define-name, [clist: natives, j-fun([clist:],
         j-block([clist:
           j-return(program.js-ast)
-        ]))
+        ]), empty-cached-info())
       ])
     ])
 

@@ -6,6 +6,7 @@ import pprint as PP
 import format as F
 import ast as A
 import file("concat-lists.arr") as CL
+import file("data-struct-utils.arr") as DSU
 
 type CList = CL.ConcatList
 clist = CL.clist
@@ -25,6 +26,15 @@ fun string-printer():
 end
 
 type Label = { get :: ( -> Number) }
+# INVARIANT: is-some(info.used-vars) <=> is-some(info.protected-vars)
+type CachedInfo = {
+  used-vars :: Option<FrozenNameSet>,
+  protected-vars :: Option<FrozenNameSet>
+}
+
+fun empty-cached-info():
+  {used-vars: none, protected-vars: none}
+end
 
 data JBlock:
   | j-block(stmts :: CList<JStmt>) with:
@@ -344,7 +354,7 @@ data JExpr:
       self.right.print-ugly-source(printer)
     end,
     method tosource(self): PP.flow([list: self.left.tosource(), self.op.tosource(), self.right.tosource()]) end
-  | j-fun(args :: CList<A.Name>, body :: JBlock) with:
+  | j-fun(args :: CList<A.Name>, body :: JBlock, ref info :: CachedInfo) with:
     method label(self): "j-fun" end,
     method print-ugly-source(self, printer) block:
       printer("function(")
@@ -571,13 +581,13 @@ sharing:
 where:
   fun j-n-id(name): j-id(A.s-name(A.dummy-loc, name)) end
   j-fun([clist: j-n-id("a").id,j-n-id("b").id],
-    j-block([clist: j-app(j-n-id("a"), [clist: j-n-id("b")])])).tosource().pretty(80)
+    j-block([clist: j-app(j-n-id("a"), [clist: j-n-id("b")])]), empty-cached-info()).tosource().pretty(80)
     is [list: "function(a, b) { a(b) }"]
 
   j-fun([clist: j-n-id("RUNTIME").id, j-n-id("NAMESPACE").id], j-block([clist:
       j-var(j-n-id("print").id, j-method(j-n-id("NAMESPACE"), "get", [clist: j-str("print")])),
       j-var(j-n-id("brand").id, j-method(j-n-id("NAMESPACE"), "get", [clist: j-str("brand")]))
-    ])).tosource().pretty(80)
+    ]), empty-cached-info()).tosource().pretty(80)
     is
     [list:
       "function(RUNTIME, NAMESPACE) {",
@@ -641,7 +651,7 @@ default-map-visitor = {
   method j-parens(self, exp): j-parens(exp.visit(self)) end,
   method j-unop(self, exp, op): j-unop(exp.visit(self), op) end,
   method j-binop(self, left, op, right): j-binop(left.visit(self), op, right.visit(self)) end,
-  method j-fun(self, args, body): j-fun(args, body.visit(self)) end,
+  method j-fun(self, args, body, info): j-fun(args, body.visit(self), info) end,
   method j-new(self, func, args): j-new(func.visit(self), args.map(_.visit(self))) end,
   method j-app(self, func, args): j-app(func.visit(self), args.map(_.visit(self))) end,
   method j-method(self, obj, meth, args): j-method(obj.visit(self), meth, args.map(_.visit(self))) end,
