@@ -16,6 +16,30 @@ import file("desugar.arr") as D
 import file("desugar-check.arr") as CH
 import file("js-ast.arr") as J
 
+
+# Container for Static Analysis information to be utilized
+# by compiler optimizations in anf-loop-compiler
+data CompilerStaticInfo:
+  | compiler-static-info(flatness-env, data-ordering)
+sharing:
+  method with-flatness(self, flatness-env):
+    compiler-static-info(flatness-env, self.data-ordering)
+  end,
+  method with-data-ordering(self, data-ordering):
+    compiler-static-info(self.flatness-env, data-ordering)
+  end,
+  method attach-to-visitor(self, visitor):
+    visitor.{
+      flatness-env: self.flatness-env,
+      data-ordering: self.data-ordering
+    }
+  end
+end
+
+fun init-compiler-static-info():
+  compiler-static-info([SD.string-dict:], [SD.string-dict:])
+end
+
 # TODO(joe): add methods for printing to module vs static information
 data CompiledCodePrinter:
   | ccp-dict(dict :: SD.StringDict) with:
@@ -439,6 +463,29 @@ fun get-flat-provides(provides, flatness-env, ast) block:
   end
 end
 
+# Visitor which collects information about
+# each variant definition and creates a statically-known
+# ordering
+fun collect-data-ordering(anfed) block:
+  ordering = [SD.mutable-string-dict:]
+  data-ordering-visitor = AA.default-map-visitor.{
+    # NOTE (Philip): This defines the canonical ordering
+    #                for cases expressions associated with
+    #                this type.
+    method a-data-expr(self, l :: A.Loc, name :: String, namet :: A.Name, variants :: List<AA.AVariant>, shared :: List<AA.AField>) block:
+      # NOTE (Philip): We can insert more sophisticated
+      #                static information here in the future
+      #                (such as constructor arity) if desired.
+      print(namet.key())
+      print("\n")
+      ordering.set-now(namet.key(), variants.map(_.name))
+      AA.a-data-expr(l, name, namet, variants.map(_.visit(self)), shared.map(_.visit(self)))
+    end
+  }
+  anfed.visit(data-ordering-visitor)
+  ordering.freeze()
+end
+
 fun println(s) block:
   print(s + "\n")
 end
@@ -449,15 +496,23 @@ fun make-compiled-pyret(program-ast, env, bindings, provides, options) -> { C.Pr
 #  each(println, anfed.tosource().pretty(80))
   flatness-env = make-prog-flatness-env(anfed, bindings, env)
   flat-provides = get-flat-provides(provides, flatness-env, anfed)
-  compiled = anfed.visit(AL.splitting-compiler(env, flatness-env, flat-provides, options))
+  data-ordering = collect-data-ordering(anfed)
+  static-info = init-compiler-static-info()
+    .with-flatness(flatness-env)
+    .with-data-ordering(data-ordering)
+  compiled = anfed.visit(AL.splitting-compiler(env, static-info, flat-provides, options))
   {flat-provides; ccp-dict(compiled)}
 end
 
 fun trace-make-compiled-pyret(trace, phase, program-ast, env, bindings, provides, options) block:
   var ret = trace
   anfed = N.anf-program(program-ast)
+  data-ordering = collect-data-ordering(anfed)
   ret := phase("ANFed", anfed, ret)
   flatness-env = make-prog-flatness-env(anfed, bindings, env)
   flat-provides = get-flat-provides(provides, flatness-env)
-  {flat-provides; phase("Generated JS", ccp-dict(anfed.visit(AL.splitting-compiler(env, flatness-env, provides, options))), ret)}
+  static-info = init-compiler-static-info()
+    .with-flatness(flatness-env)
+    .with-data-ordering(data-ordering)
+  {flat-provides; phase("Generated JS", ccp-dict(anfed.visit(AL.splitting-compiler(env, static-info, provides, options))), ret)}
 end

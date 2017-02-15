@@ -961,7 +961,7 @@ fun compile-inline-cases-branch(compiler, compiled-val, branch, compiled-body, c
     c-block(j-block(preamble + compiled-body.block.stmts), compiled-body.new-cases)
   end
 end
-fun compile-split-cases(compiler, cases-loc, opt-dest, typ, val :: N.AVal, branches :: List<N.ACasesBranch>, _else :: N.AExpr, opt-body :: Option<N.AExpr>):
+fun compile-split-cases(compiler, cases-loc, opt-dest, typ, val :: N.AVal, branches :: List<N.ACasesBranch>, _else :: N.AExpr, opt-body :: Option<N.AExpr>) block:
   compiled-val = val.visit(compiler).exp
   {after-cases-cases; after-cases-label} = get-new-cases(compiler, opt-dest, opt-body, compiler.cur-ans)
   compiler-after-cases = compiler.{cur-target: after-cases-label}
@@ -974,6 +974,7 @@ fun compile-split-cases(compiler, cases-loc, opt-dest, typ, val :: N.AVal, branc
     ^ cl-snoc(_, j-case(label, branch.block))
     ^ cl-append(_, branch.new-cases)
   end
+  # see: resolve-scope.arr:1245
   branch-else-cases =
     (branch-cases
       ^ cl-snoc(_, j-case(else-label, compiled-else.block))
@@ -981,6 +982,8 @@ fun compile-split-cases(compiler, cases-loc, opt-dest, typ, val :: N.AVal, branc
   dispatch-table = j-obj(for CL.map_list2(branch from branches, label from branch-labels): j-field(branch.name, label) end)
   dispatch = j-id(fresh-id(compiler-name("cases_dispatch")))
   # NOTE: Ignoring typ for the moment!
+  print(typ)
+  print("\n")
   new-cases =
     branch-else-cases
     + after-cases-cases
@@ -1695,7 +1698,7 @@ fun compile-provides(provides):
   end
 end
 
-fun compile-module(self, l, imports-in, prog, freevars, provides, env, flatness-env) block:
+fun compile-module(self, l, imports-in, prog, freevars, provides, env) block:
   js-names.reset()
   shadow freevars = freevars.unfreeze()
   fun inst(id): j-app(j-id(id), [clist: RUNTIME, NAMESPACE]) end
@@ -1911,26 +1914,23 @@ fun compile-module(self, l, imports-in, prog, freevars, provides, env, flatness-
   wrap-new-module(module-body)
 end
 
-fun compile-program(self, l, imports-in, prog, freevars, env, flatness-env):
+fun compile-program(self, l, imports-in, prog, freevars, env):
   raise("Use compile-module instead!  Pass the compile-module: true compiler option")
 end
 
-# Eventually maybe we should have a more general "optimization-env" instead of
-# flatness-env. For now, leave it since our design might change anyway.
-fun non-splitting-compiler(env, flatness-env, provides, options):
-  compiler-visitor.{
+fun non-splitting-compiler(env, static-env, provides, options):
+  static-env.attach-to-visitor(compiler-visitor.{
     options: options,
-    flatness-env: flatness-env,
     method a-program(self, l, _, imports, body):
       simplified = body.visit(remove-useless-if-visitor)
       freevars = N.freevars-e(simplified)
       if options.compile-module:
-        compile-module(self, l, imports, simplified, freevars, provides, env, flatness-env)
+        compile-module(self, l, imports, simplified, freevars, provides, env)
       else:
-        compile-program(self, l, imports, simplified, freevars, provides, env, flatness-env)
+        compile-program(self, l, imports, simplified, freevars, provides, env)
       end
     end
-  }
+  })
 end
 
 splitting-compiler = non-splitting-compiler

@@ -589,6 +589,14 @@ default-map-visitor = {
   method a-import-builtin(self, l :: Loc, lib :: String, name :: A.Name):
     a-import-builtin(l, lib, name)
   end,
+  method a-import-complete(self, l, values, types, import-type, vals-name, types-name):
+    a-import-complete(l,
+      values.map(_.visit(self)),
+      types.map(_.visit(self)),
+      import-type,
+      vals-name,
+      types-name)
+  end,
   method a-type-bind(self, l, name, ann):
     a-type-bind(l, name, ann)
   end,

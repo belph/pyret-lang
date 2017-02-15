@@ -20,16 +20,16 @@ desugar-visitor = A.default-map-visitor.{
     val-exp = val.visit(self)
     val-id = A.s-id(l, name)
     A.s-let-expr(l, [list: A.s-let-bind(l, A.s-bind(l, false, name, typ-compiled), val-exp)],
-      A.s-cases-else(l, A.a-blank, val-id, branches.map(_.visit(self)),
+      A.s-cases-else(l, typ, val-id, branches.map(_.visit(self)),
         els.visit(self), true), false)
   end,
-  method s-cases(self, l, typ, val, branches):
+  method s-cases(self, l, typ, val, branches) block:
     name = A.global-names.make-atom("cases")
     typ-compiled = typ.visit(self)
     val-exp = val.visit(self)
     val-id = A.s-id(l, name)
     A.s-let-expr(l, [list: A.s-let-bind(l, A.s-bind(l, false, name, typ-compiled), val-exp)],
-      A.s-cases-else(l, A.a-blank, val-id, branches.map(_.visit(self)),
+      A.s-cases-else(l, typ, val-id, branches.map(_.visit(self)),
         A.s-block(l, [list: no-cases-exn(l, val-id)]), true), false)
   end,
   method s-check(self, l, name, body, keyword-check):
