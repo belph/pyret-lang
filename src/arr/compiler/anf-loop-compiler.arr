@@ -1605,8 +1605,11 @@ fun compile-type-member(name, typ):
 end
 
 fun compile-provided-data(typ :: T.DataType):
-  cases(T.DataType) typ:
+  cases(T.DataType) typ block:
     | t-data(name, params, variants, members, l) =>
+      print("compile-provided-data: ")
+      print(typ)
+      print("\n")
       j-list(false,
         [clist: j-str("data"), j-str(name),
           j-list(false, for CL.map_list(p from params):

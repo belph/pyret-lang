@@ -106,6 +106,9 @@ fun make-expr-data-env(
         alias-to-type-name)
     | a-let(_, bind, val, body) => block:
         if AA.is-a-data-expr(val) block:
+          print("make-expr-data-env: ")
+          print(bind)
+          print("\n")
           type-name-to-variants.set-now(bind.id.key(), val.variants)
           # Make self-mapping entry so we know it's a "type" name
           alias-to-type-name.set-now(bind.id.key(), bind.id.key())
