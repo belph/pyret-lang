@@ -106,8 +106,13 @@ fun make-expr-data-env(
         alias-to-type-name)
     | a-let(_, bind, val, body) => block:
         if AA.is-a-data-expr(val) block:
-          print("make-expr-data-env: ")
-          print(bind)
+          # TODO (Philip): We can stash the info here
+          print("make-expr-data-env[")
+          print(torepr(val.name))
+          print("; ")
+          print(torepr(val.namet))
+          print("]: ")
+          print(val.variants.map(_.name))
           print("\n")
           type-name-to-variants.set-now(bind.id.key(), val.variants)
           # Make self-mapping entry so we know it's a "type" name
@@ -212,6 +217,9 @@ fun make-lettable-data-env(
     | a-val(_, v) => default-ret
     | a-data-expr(l, name, namet, vars, shared) => default-ret
     | a-cases(_, typ, val, branches, els) => block:
+        print("\nmake-lettable-data-env: ")
+        print(typ)
+        print("\n")
         visit-branch = lam(case-branch):
           make-expr-data-env(case-branch.body, sd, type-name-to-variants,
             alias-to-type-name)
@@ -359,7 +367,10 @@ fun make-lettable-flatness-env(
     | a-data-expr(l, name, namet, vars, shared) =>
       default-ret
     # NOTE -- cases might not be flat b/c it checks annotations
-    | a-cases(_, typ, val, branches, els) =>
+    | a-cases(_, typ, val, branches, els) => block:
+      print("make-lettable-flatness-env: ")
+      print(typ)
+      print("\n")
       # Flatness is the max of the flatness all the cases branches
       combine = lam(case-branch, max-flat):
         branch-flatness = make-expr-flatness-env(case-branch.body, sd)
@@ -368,13 +379,17 @@ fun make-lettable-flatness-env(
       max-flat = branches.foldl(combine, some(0))
 
       else-flat = make-expr-flatness-env(els, sd)
-      flatness-max(max-flat, else-flat)
+        flatness-max(max-flat, else-flat)
+      end
   end
 end
 
-fun make-prog-flatness-env(anfed :: AA.AProg, bindings :: SD.MutableStringDict<C.ValueBind>, env :: C.CompileEnvironment) -> SD.StringDict<Number> block:
+fun make-prog-flatness-env(anfed :: AA.AProg, bindings :: SD.MutableStringDict<C.ValueBind>, env :: C.CompileEnvironment) block:
 
-  sd = SD.make-mutable-string-dict()
+  sd = {
+    flatness: SD.make-mutable-string-dict(),
+    data-ordering: SD.make-mutable-string-dict()
+  }
 
   for each(k from bindings.keys-list-now()):
     vb = bindings.get-value-now(k)
@@ -388,9 +403,26 @@ fun make-prog-flatness-env(anfed :: AA.AProg, bindings :: SD.MutableStringDict<C
             | some(provides) =>
               exported-as = vb.atom.toname()
               value-export = provides.values.get-value(exported-as)
+              # TODO (Philip): Can we toss in the variant info here?
               cases(C.ValueExport) value-export:
                 | v-fun(_, _, flatness) =>
-                  sd.set-now(k, flatness)
+                  sd.flatness.set-now(k, flatness)
+                | v-just-type(t) => block:
+                    cases (Option) provides.data-definitions.get(exported-as) block:
+                      | some(x) =>
+                        print("Some: ")
+                        print(x)
+                        print(" [")
+                        print(t)
+                        print("]")
+                        print("\n")
+                      | none =>
+                        print("None: ")
+                        print("[")
+                        print(t)
+                        print("]\n")
+                    end
+                  end
                 | else =>
                   nothing
               end
@@ -401,16 +433,16 @@ fun make-prog-flatness-env(anfed :: AA.AProg, bindings :: SD.MutableStringDict<C
 
   flatness-env = cases(AA.AProg) anfed:
     | a-program(_, prov, imports, body) => block:
-        make-expr-data-env(body, sd,
+        make-expr-data-env(body, sd.flatness,
           SD.make-mutable-string-dict(), SD.make-mutable-string-dict())
         #print("data env: " + tostring(sd) + "\n\n")
-        make-expr-flatness-env(body, sd)
+        make-expr-flatness-env(body, sd.flatness)
         #print("flatness env: " + tostring(sd) + "\n\n")
         sd
       end
   end
   #print("flatness env: " + tostring(flatness-env) + "\n")
-  flatness-env.freeze()
+  {flatness: flatness-env.flatness.freeze(), data-ordering: flatness-env.data-ordering.freeze()}
 end
 
 
@@ -497,7 +529,7 @@ fun make-compiled-pyret(program-ast, env, bindings, provides, options) -> { C.Pr
 #  each(println, program-ast.tosource().pretty(80))
   anfed = N.anf-program(program-ast)
 #  each(println, anfed.tosource().pretty(80))
-  flatness-env = make-prog-flatness-env(anfed, bindings, env)
+  flatness-env = make-prog-flatness-env(anfed, bindings, env).flatness
   flat-provides = get-flat-provides(provides, flatness-env, anfed)
   data-ordering = collect-data-ordering(anfed)
   static-info = init-compiler-static-info()
