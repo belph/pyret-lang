@@ -105,6 +105,15 @@ fun make-default-types() block:
   ]))
 
   # Need to be fixed to correct type:
+  default-typs.set-now(A.s-global("raw-array-get").key(), t-top)
+  default-typs.set-now(A.s-global("raw-array-set").key(), t-top)
+  default-typs.set-now(A.s-global("raw-array-of").key(), t-top)
+  default-typs.set-now(A.s-global("raw-array-length").key(), t-top)
+  default-typs.set-now(A.s-global("raw-array-to-list").key(), t-top)
+  default-typs.set-now(A.s-global("raw-array-fold").key(), t-top)
+  default-typs.set-now(A.s-global("raw-array-from-list").key(), t-top)
+  default-typs.set-now(A.s-global("raw-array-join-str").key(), t-top)
+  default-typs.set-now(A.s-global("raw-array").key(), t-top)
   default-typs.set-now(A.s-global("ref-get").key(), t-top)
   default-typs.set-now(A.s-global("ref-set").key(), t-top)
   default-typs.set-now(A.s-global("ref-freeze").key(), t-top)
@@ -383,7 +392,7 @@ module-const-lists = t-module("builtin://lists",
             "_match", t-top,
             "_plus", t-arrow([list: lotv], lotv),
             "push", t-arrow([list: ], lotv),
-            "split-at", t-arrow(tv-arg, t-record([string-dict:
+            "split-at", t-arrow([list: t-number], t-record([string-dict:
               "prefix", lotv,
               "suffix", lotv
             ])),
@@ -699,6 +708,7 @@ module-const-s-exp-structs = t-module("builtin://s-exp-structs",
       ])
     ),
   SD.make-string-dict()
+    .set("S-Exp", t-s-exp)
 )
 
 fun make-default-modules() block:

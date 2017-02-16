@@ -10,6 +10,9 @@ import file("compile-structs.arr") as CS
 import file("locators/builtin.arr") as B
 import file("server.arr") as S
 
+# this value is the limit of number of steps that could be inlined in case body
+DEFAULT-INLINE-CASE-LIMIT = 5
+
 fun main(args):
   options = [D.string-dict:
     "serve",
@@ -24,8 +27,6 @@ fun main(args):
       C.next-val(C.String, C.once, "JSON file to use for requirejs configuration of build-runnable"),
     "outfile",
       C.next-val(C.String, C.once, "Output file for build-runnable"),
-    "build",
-      C.next-val(C.String, C.once, "Pyret (.arr) file to build"),
     "run",
       C.next-val(C.String, C.once, "Pyret (.arr) file to compile and run"),
     "standalone-file",
@@ -52,8 +53,12 @@ fun main(args):
       C.flag(C.once, "Run without checking for shadowed variables"),
     "improper-tail-calls",
       C.flag(C.once, "Run without proper tail calls"),
+    "collect-times",
+      C.flag(C.once, "Collect timing information about compilation"),
     "type-check",
-      C.flag(C.once, "Type-check the program during compilation")
+      C.flag(C.once, "Type-check the program during compilation"),
+    "inline-case-body-limit",
+      C.next-val-default(C.Number, DEFAULT-INLINE-CASE-LIMIT, none, C.once, "Set number of steps that could be inlined in case body")
   ]
 
   params-parsed = C.parse-args(options, args)
@@ -73,6 +78,7 @@ fun main(args):
         if r.has-key("library"): CS.minimal-imports
         else: CS.standard-imports end
       module-dir = r.get-value("module-load-dir")
+      inline-case-body-limit = r.get-value("inline-case-body-limit")
       check-all = r.has-key("check-all")
       type-check = r.has-key("type-check")
       tail-calls = not(r.has-key("improper-tail-calls"))
@@ -107,11 +113,12 @@ fun main(args):
                 type-check : type-check,
                 allow-shadowed : allow-shadowed,
                 collect-all: false,
+                collect-times: r.has-key("collect-times") and r.get-value("collect-times"),
                 ignore-unbound: false,
                 proper-tail-calls: tail-calls,
-                compile-module: true,
                 compiled-cache: compiled-dir,
-                display-progress: display-progress
+                display-progress: display-progress,
+                inline-case-body-limit: inline-case-body-limit
               })
         else if r.has-key("serve"):
           port = r.get-value("port")
@@ -125,39 +132,16 @@ fun main(args):
                 type-check : type-check,
                 allow-shadowed : allow-shadowed,
                 collect-all: false,
+                collect-times: r.has-key("collect-times") and r.get-value("collect-times"),
                 ignore-unbound: false,
                 proper-tail-calls: tail-calls,
-                compile-module: true,
                 compiled-cache: compiled-dir,
                 display-progress: display-progress
               })
            |#
-        else if r.has-key("build"):
-          result = CLI.compile(r.get-value("build"),
-            CS.default-compile-options.{
-              check-mode : check-mode,
-              type-check : type-check,
-              allow-shadowed : allow-shadowed,
-              collect-all: false,
-              ignore-unbound: false,
-              proper-tail-calls: tail-calls,
-              compile-module: false,
-              display-progress: display-progress
-            })
-          failures = filter(CS.is-err, result.loadables)
-          when is-link(failures):
-            for each(f from failures) block:
-              for lists.each(e from f.errors) block:
-                print-error(tostring(e))
-                print-error("\n")
-              end
-              raise("There were compilation errors")
-            end
-          end
         else if r.has-key("run"):
           CLI.run(r.get-value("run"), CS.default-compile-options.{
               standalone-file: standalone-file,
-              compile-module: true,
               display-progress: display-progress,
               check-all: check-all
             })

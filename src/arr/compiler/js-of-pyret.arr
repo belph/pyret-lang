@@ -5,7 +5,9 @@ provide-types *
 import ast as A
 import file as F
 import string-dict as SD
+import pprint as PP
 import sets as S
+
 import file("anf.arr") as N
 import file("anf-loop-compiler.arr") as AL
 import file("ast-anf.arr") as AA
@@ -15,7 +17,6 @@ import file("concat-lists.arr") as CL
 import file("desugar.arr") as D
 import file("desugar-check.arr") as CH
 import file("js-ast.arr") as J
-
 
 # Container for Static Analysis information to be utilized
 # by compiler optimizations in anf-loop-compiler
@@ -40,11 +41,20 @@ fun init-compiler-static-info():
   compiler-static-info([SD.string-dict:], [SD.string-dict:])
 end
 
+cl-empty = CL.concat-empty
+cl-cons = CL.concat-cons
+
+fun cl-map-sd(f, sd):
+  for SD.fold-keys(acc from cl-empty, key from sd):
+    cl-cons(f(key), acc)
+  end
+end
+
 # TODO(joe): add methods for printing to module vs static information
 data CompiledCodePrinter:
   | ccp-dict(dict :: SD.StringDict) with:
     method to-j-expr(self, d):
-      J.j-parens(J.j-obj(for CL.map_list(k from d.keys-list()):
+      J.j-parens(J.j-obj(for cl-map-sd(k from d):
           J.j-field(k, d.get-value(k))
         end))
     end,
@@ -54,8 +64,8 @@ data CompiledCodePrinter:
     method print-js-static(self, printer):
       self.to-j-expr(self.dict.remove("theModule")).print-ugly-source(printer)
     end,
-    method pyret-to-js-pretty(self, width) -> String:
-      self.to-j-expr(self.dict).tosource().pretty(width).join-str("\n")
+    method pyret-to-js-pretty(self) -> PP.PPrintDoc:
+      self.to-j-expr(self.dict).tosource()
     end,
     method pyret-to-js-runnable(self) -> String:
       self.to-j-expr(self.dict).to-ugly-source()
@@ -64,8 +74,8 @@ data CompiledCodePrinter:
       self.to-j-expr(self.dict).print-ugly-source(printer)
     end
   | ccp(compiled :: J.JExpr) with:
-    method pyret-to-js-pretty(self, width) -> String:
-      self.compiled.tosource().pretty(width).join-str("\n")
+    method pyret-to-js-pretty(self) -> PP.PPrintDoc:
+      self.compiled.tosource()
     end,
     method pyret-to-js-runnable(self) -> String:
       self.compiled.to-ugly-source()
@@ -74,8 +84,8 @@ data CompiledCodePrinter:
       self.compiled.print-ugly-source(printer)
     end
   | ccp-string(compiled :: String) with:
-    method pyret-to-js-pretty(self, width) -> String:
-      raise("Cannot generate pretty JS from code string")
+    method pyret-to-js-pretty(self) -> PP.PPrintDoc:
+      PP.str(self.compiled)
     end,
     method pyret-to-js-runnable(self) -> String:
       self.compiled
@@ -117,7 +127,7 @@ fun make-expr-data-env(
           type-name-to-variants.set-now(bind.id.key(), val.variants)
           # Make self-mapping entry so we know it's a "type" name
           alias-to-type-name.set-now(bind.id.key(), bind.id.key())
-        else if AA.is-a-id-letrec(val) and val.safe:
+        else if AA.is-a-id-safe-letrec(val):
           # If we say
           # x = Type
           # y = x
@@ -127,7 +137,7 @@ fun make-expr-data-env(
           when is-some(type-name-opt):
             alias-to-type-name.set-now(bind.id.key(), type-name-opt.value)
           end
-        else if AA.is-a-dot(val) and AA.is-a-id(val.obj):
+        else if AA.is-a-dot(val) and AA.is-a-id-safe-letrec(val.obj):
           # Check for: xyz = Type.is-variant or xyz = Type.flat-constructor
           type-name-opt = alias-to-type-name.get-now(val.obj.id.key())
           when is-some(type-name-opt):
@@ -186,19 +196,25 @@ fun make-lettable-data-env(
       end
     | a-assign(_, id, value) =>
       block:
-        when AA.is-a-id(value) and sd.has-key-now(value.id.key()):
-          sd.set-now(id.key(), sd.get-value-now(value.id.key()))
+        when AA.is-a-id(value) block:
+          when sd.has-key-now(value.id.key()):
+            sd.set-now(id.key(), sd.get-value-now(value.id.key()))
+          end
+
+          when alias-to-type-name.has-key-now(value.id.key()):
+            val-type = alias-to-type-name.get-value-now(value.id.key())
+            alias-to-type-name.set-now(id.key(), val-type)
+          end
         end
 
-        # FIXME: Do I need to check if value.safe is true here?
-        when AA.is-a-id(value):
+        when AA.is-a-id-safe-letrec(value):
           type-name-opt = alias-to-type-name.get-now(value.id.key())
           when is-some(type-name-opt):
             alias-to-type-name.set-now(id.key(), type-name-opt.value)
           end
         end
       end
-    | a-app(_, f, args) => default-ret
+    | a-app(_, f, args, _) => default-ret
     | a-method-app(_, obj, meth, args) => default-ret
     | a-prim-app(_, f, args) => default-ret
     | a-ref(_, ann) => default-ret
@@ -214,6 +230,7 @@ fun make-lettable-data-env(
     | a-method(_, name, args, ret, body) => default-ret
     | a-id-var(_, id) => default-ret
     | a-id-letrec(_, id, safe) => default-ret
+    | a-id-safe-letrec(_, id) => default-ret
     | a-val(_, v) => default-ret
     | a-data-expr(l, name, namet, vars, shared) => default-ret
     | a-cases(_, typ, val, branches, els) => block:
@@ -259,7 +276,7 @@ fun make-expr-flatness-env(
         # flatness of defining this lambda is 0, since we're not actually
         # doing anything with it
         some(0)
-      else if AA.is-a-id-letrec(val) and val.safe:
+      else if AA.is-a-id-safe-letrec(val):
         block:
           # If we're binding this name to something that's already been defined
           # just copy over the definition
@@ -328,7 +345,7 @@ fun make-lettable-flatness-env(
         end
         default-ret
       end
-    | a-app(_, f, args) =>
+    | a-app(_, f, args, _) =>
       # Look up flatness in the dictionary
       if AA.is-a-id(f):
         get-flatness-for-call(f.id.key(), sd)
@@ -362,6 +379,8 @@ fun make-lettable-flatness-env(
       default-ret
     | a-id-letrec(_, id, safe) =>
       default-ret
+    | a-id-safe-letrec(_, id) =>
+      default-ret
     | a-val(_, v) =>
       default-ret
     | a-data-expr(l, name, namet, vars, shared) =>
@@ -391,19 +410,44 @@ fun make-prog-flatness-env(anfed :: AA.AProg, bindings :: SD.MutableStringDict<C
     data-ordering: SD.make-mutable-string-dict()
   }
 
-  for each(k from bindings.keys-list-now()):
+  for SD.each-key-now(k from bindings):
     vb = bindings.get-value-now(k)
-    when C.is-bo-module(vb.origin):
-      cases(Option) vb.origin.mod:
-        | none => nothing
+    when C.is-bo-module(vb.origin) block:
+      print("Processing binding ")
+      print(k)
+      print(": ")
+      print(vb)
+      print("\n")
+      cases(Option) vb.origin.mod block:
+        | none =>
+          when A.is-s-global(vb.atom) block:
+            name = vb.atom.toname()
+            uri = env.globals.values.get-value(name)
+            provides-opt = env.mods.get(uri)
+            cases (Option) provides-opt block:
+              | none => nothing
+              | some(provides) =>
+                ve = provides.values.get-value(name)
+                print("\tHAS VALUE EXPORT: ")
+                print(ve)
+                print("\n")
+                cases(C.ValueExport) ve:
+                  | v-fun(_, _, flatness) => sd.flatness.set-now(vb.atom.key(), flatness)
+                  | else => nothing
+                end
+            end
+          end
         | some(import-type) =>
           dep = AU.import-to-dep(import-type).key()
-          cases(Option) env.mods.get(dep):
+          cases(Option) env.mods.get(dep) block:
             | none => raise("There is a binding whose module is not in the compile env: " + to-repr(k) + " " + to-repr(import-type))
             | some(provides) =>
               exported-as = vb.atom.toname()
               value-export = provides.values.get-value(exported-as)
               # TODO (Philip): Can we toss in the variant info here?
+              print("\tHAS VALUE EXPORT: ")
+              print(value-export)
+              print("\n")
               cases(C.ValueExport) value-export:
                 | v-fun(_, _, flatness) =>
                   sd.flatness.set-now(k, flatness)
@@ -435,14 +479,13 @@ fun make-prog-flatness-env(anfed :: AA.AProg, bindings :: SD.MutableStringDict<C
     | a-program(_, prov, imports, body) => block:
         make-expr-data-env(body, sd.flatness,
           SD.make-mutable-string-dict(), SD.make-mutable-string-dict())
-        #print("data env: " + tostring(sd) + "\n\n")
         make-expr-flatness-env(body, sd.flatness)
         #print("flatness env: " + tostring(sd) + "\n\n")
         sd
       end
   end
   #print("flatness env: " + tostring(flatness-env) + "\n")
-  {flatness: flatness-env.flatness.freeze(), data-ordering: flatness-env.data-ordering.freeze()}
+  compiler-static-info(flatness-env.flatness.freeze(), flatness-env.data-ordering.freeze())
 end
 
 
@@ -481,7 +524,7 @@ fun get-flat-provides(provides, flatness-env, ast) block:
   dvs-dict = get-defined-values(ast)
   cases(C.Provides) provides block:
     | provides(uri, values, aliases, datatypes) =>
-      new-values = for fold(s from [SD.string-dict:], k from values.keys-list()):
+      new-values = for SD.fold-keys(s from [SD.string-dict:], k from values):
         maybe-flatness = flatness-env.get(dvs-dict.get-value(k))
         existing-val = values.get-value(k)
         new-val = cases(Option) maybe-flatness:
@@ -521,33 +564,25 @@ fun collect-data-ordering(anfed) block:
   ordering.freeze()
 end
 
+fun trace-make-compiled-pyret(add-phase, program-ast, env, bindings, provides, options)
+  -> { C.Provides; C.CompileResult<CompiledCodePrinter> } block:
+  anfed = add-phase("ANFed", N.anf-program(program-ast))
+  static-env = add-phase("Build flatness env", make-prog-flatness-env(anfed, bindings, env))
+  flat-provides = add-phase("Get flat-provides", get-flat-provides(provides, static-env.flatness-env, anfed))
+  compiled = anfed.visit(AL.splitting-compiler(env, add-phase, static-env, flat-provides, options))
+  {flat-provides; add-phase("Generated JS", C.ok(ccp-dict(compiled)))}
+end
+
 fun println(s) block:
   print(s + "\n")
 end
 
 fun make-compiled-pyret(program-ast, env, bindings, provides, options) -> { C.Provides; CompiledCodePrinter} block:
-#  each(println, program-ast.tosource().pretty(80))
-  anfed = N.anf-program(program-ast)
-#  each(println, anfed.tosource().pretty(80))
-  flatness-env = make-prog-flatness-env(anfed, bindings, env).flatness
-  flat-provides = get-flat-provides(provides, flatness-env, anfed)
-  data-ordering = collect-data-ordering(anfed)
-  static-info = init-compiler-static-info()
-    .with-flatness(flatness-env)
-    .with-data-ordering(data-ordering)
-  compiled = anfed.visit(AL.splitting-compiler(env, static-info, flat-provides, options))
+  #  each(println, program-ast.tosource().pretty(80))
+    anfed = N.anf-program(program-ast)
+  #each(println, anfed.tosource().pretty(80))
+  static-env = make-prog-flatness-env(anfed, bindings, env)
+  flat-provides = get-flat-provides(provides, static-env.flatness-env, anfed)
+  compiled = anfed.visit(AL.splitting-compiler(env, static-env, flat-provides, options))
   {flat-provides; ccp-dict(compiled)}
-end
-
-fun trace-make-compiled-pyret(trace, phase, program-ast, env, bindings, provides, options) block:
-  var ret = trace
-  anfed = N.anf-program(program-ast)
-  data-ordering = collect-data-ordering(anfed)
-  ret := phase("ANFed", anfed, ret)
-  flatness-env = make-prog-flatness-env(anfed, bindings, env)
-  flat-provides = get-flat-provides(provides, flatness-env)
-  static-info = init-compiler-static-info()
-    .with-flatness(flatness-env)
-    .with-data-ordering(data-ordering)
-  {flat-provides; phase("Generated JS", ccp-dict(anfed.visit(AL.splitting-compiler(env, static-info, provides, options))), ret)}
 end

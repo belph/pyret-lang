@@ -116,7 +116,8 @@ define([], function() {
       if(value.bind === "fun") {
         typ = value.typ;
         wrapper = function(t) {
-          return runtime.makeObject({ bind: "fun", name: value.name, flatness: value.flatness, typ: t});
+          var flatness = value.flatness == parseInt(value.flatness) ? value.flatness : false;
+          return runtime.makeObject({ bind: "fun", name: value.name || "", flatness: flatness, typ: t});
         };
       }
       else if(value.bind === "var") {
@@ -432,7 +433,7 @@ define([], function() {
     else if(iO(typ)) {
       // If the object a ValueExport, we want to return an object that's
       // exactly the same, but with the typ field expanded.
-      if (typ.tag == "v-fun") {
+      if (typ.bind == "fun") {
         var o = {};
         Object.keys(typ).forEach(function(k) {
           if (k == "typ") {

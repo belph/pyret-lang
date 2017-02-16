@@ -41,7 +41,7 @@
       var realOut = config.out;
       config.out = path.join(storeDir, "program-deps.js");
       config.name = "program-require";
-      runtime.pauseStack(function(restarter) {
+      return runtime.pauseStack(function(restarter) {
         requirejs.optimize(config, function(result) {
           var programWithDeps = fs.readFileSync(config.out, {encoding: 'utf8'});
           // Browser/node check based on window below

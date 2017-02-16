@@ -204,7 +204,7 @@ fun type-from-raw(uri, typ, tyvar-env :: SD.StringDict<T.Type>) block:
         tvn = A.global-names.make-atom(a)
         new-env.set(a, tvn)
       end
-      params = for map(k from new-env.keys-list()):
+      params = for SD.map-keys(k from new-env):
         T.t-var(new-env.get-value(k), l, false)
       end
       T.t-forall(params, type-from-raw(uri, typ.onto, new-env), l, false)
@@ -242,7 +242,7 @@ fun datatype-from-raw(uri, datatyp):
       tvn = A.global-names.make-atom(a)
       pdict.set(a, tvn)
     end
-    params = for map(k from pdict.keys-list()):
+    params = for SD.map-keys(k from pdict):
       T.t-var(pdict.get-value(k), l, false)
     end
     variants = map(tvariant-from-raw(uri, _, pdict), datatyp.variants)
@@ -828,7 +828,10 @@ data CompileError:
             [ED.para:
               ED.text("The identifier "),
               ED.code(ED.highlight(ED.text(self.id.id.toname()), [ED.locs: self.id.l], 0)),
-              ED.text(" is unbound. It is "),
+              ED.text(" is unbound:")],
+             ED.cmcode(self.id.l),
+            [ED.para:
+              ED.text("It is "),
               ED.highlight(ED.text("used"), [ED.locs: self.id.l], 0),
               ED.text(" but not previously defined.")]]
       end
@@ -913,14 +916,15 @@ data CompileError:
             ED.text(self.ann.tosource().pretty(1000)), ED.text("at"),
             draw-and-highlight(self.id.l)]
         | srcloc(_, _, _, _, _, _, _) =>
+          ann-name = if A.is-a-name(self.ann): self.ann.id.toname() else: self.ann.obj.toname() + "." + self.ann.field end
           [ED.error:
             [ED.para:
               ED.text("The name "),
-              ED.code(ED.text(self.ann.id.toname())),
+              ED.code(ED.text(ann-name)),
               ED.text(" at "),
               ED.loc(self.ann.l),
               ED.text(" is used to indicate a type, but a definition of a type named "),
-              ED.code(ED.text(self.ann.id.toname())),
+              ED.code(ED.text(ann-name)),
               ED.text(" could not be found.")]]
       end
     end
@@ -1511,7 +1515,7 @@ data CompileError:
       [ED.error:
         [ED.para:
           ED.text("The type checker rejected your program because the object type")],
-         ED.highlight(ED.embed(self.obj), [list: self.obj-loc], 0),
+         ED.highlight(ED.text(self.obj), [list: self.obj-loc], 0),
         [ED.para:
           ED.text("does not have a field named "),
           ED.code(ED.highlight(ED.text(self.field-name), [list: self.access-loc], 1))]]
@@ -1912,7 +1916,7 @@ data CompileError:
     method render-reason(self):
       [ED.error:
         [ED.para:
-          ED.text("This program cannot be type-checked. Please send it to the developers. " + "The reason that it cannot be type-checked is: " + self.reason +
+          ED.text("This program cannot be type-checked. " + "The reason that it cannot be type-checked is: " + self.reason +
         " at "), ED.cmcode(self.loc)]]
     end
   | unsupported(message :: String, blame-loc :: A.Loc) with:
@@ -2175,9 +2179,9 @@ type CompileOptions = {
   type-check :: Boolean,
   allow-shadowed :: Boolean,
   collect-all :: Boolean,
+  collect-times :: Boolean,
   ignore-unbound :: Boolean,
   proper-tail-calls :: Boolean,
-  compile-module :: Boolean,
   compiled-cache :: String,
   display-progress :: Boolean,
   standalone-file :: String,
@@ -2192,9 +2196,10 @@ default-compile-options = {
   type-check : false,
   allow-shadowed : false,
   collect-all: false,
+  collect-times: false,
   ignore-unbound: false,
   proper-tail-calls: true,
-  compile-module: true,
+  inline-case-body-limit: 5,
   compiled-cache: "compiled",
   display-progress: true,
   log: lam(s, to-clear):
@@ -2210,7 +2215,7 @@ default-compile-options = {
   log-error: lam(s):
     print-error(s)
   end,
-  method on-compile(_, locator, loadable): loadable end,
+  method on-compile(_, locator, loadable, _): loadable end,
   method before-compile(_, _): nothing end,
   standalone-file: "src/js/base/handalone.js"
 }
@@ -2363,6 +2368,8 @@ runtime-provides = provides("builtin://global",
     "raw-array-fold", t-top,
     "raw-array-filter", t-top,
     "raw-array-map", t-top,
+    "raw-array-join-str", t-top,
+    "raw-array-from-list", t-top,
     "raw-array", t-record(
       [string-dict:
         "make", t-forall1(lam(a): t-arrow([list: t-array(a)], t-array(a)) end),
@@ -2404,14 +2411,14 @@ runtime-provides = provides("builtin://global",
      "RawArray", t-top  ],
   [string-dict:])
 
-runtime-builtins = for fold(rb from [string-dict:], k from runtime-provides.values.keys().to-list()):
+runtime-builtins = for SD.fold-keys(rb from [string-dict:], k from runtime-provides.values):
   rb.set(k, "builtin(global)")
 end
 
-runtime-types = for fold(rt from [string-dict:], k from runtime-provides.aliases.keys().to-list()):
+runtime-types = for SD.fold-keys(rt from [string-dict:], k from runtime-provides.aliases):
   rt.set(k, "builtin(global)")
 end
-shadow runtime-types = for fold(rt from runtime-types, k from runtime-provides.data-definitions.keys().to-list()):
+shadow runtime-types = for SD.fold-keys(rt from runtime-types, k from runtime-provides.data-definitions):
   rt.set(k, "builtin(global)")
 end
 
