@@ -1032,7 +1032,19 @@ fun compile-split-cases(compiler, cases-loc, opt-dest, typ, val :: N.AVal, branc
     ^ cl-snoc(_, j-case(label, branch.block))
     ^ cl-append(_, branch.new-cases)
   end
-  # see: resolve-scope.arr:1245
+  # Dotted names currently unsupported
+  # (waiting until `module-ids` lands)
+  canonical-ordering = if A.is-a-name(typ) block:
+    print("Checking ordering for type ")
+    print(typ.id.key())
+    print("...")
+    compiler.data-ordering.get(typ.id.key())
+  else:
+    none
+  end
+  print("Got canonical ordering: ")
+  print(canonical-ordering)
+  print("\n")
   branch-else-cases =
     (branch-cases
       ^ cl-snoc(_, j-case(else-label, compiled-else.block))
@@ -1981,19 +1993,20 @@ end
 # Eventually maybe we should have a more general "optimization-env" instead of
 # flatness-env. For now, leave it since our design might change anyway.
 fun splitting-compiler(env, add-phase, static-env, provides, options):
-  static-env.attach-to-visitor(compiler-visitor.{
-    add-phase: add-phase,
-    options: options,
-    method a-program(self, l, _, imports, body) block:
-      total-time := 0
-      # This achieves nothing with our current code-gen, so it's a waste of time
-      # simplified = body.visit(remove-useless-if-visitor)
-      # add-phase("Remove useless ifs", simplified)
-      freevars = N.freevars-e(body)
-      add-phase("Freevars-e", freevars)
-      ans = compile-module(self, l, imports, body, freevars, provides, env)
-      add-phase(string-append("Total simplification: ", tostring(total-time)), nothing)
-      ans
-    end
-  })
+  static-env.attach-to-object(compiler-visitor.{
+      add-phase: add-phase,
+      options: options,
+      method a-program(self, l, _, imports, body) block:
+        total-time := 0
+        # This achieves nothing with our current code-gen, so it's a waste of time
+        # simplified = body.visit(remove-useless-if-visitor)
+        # add-phase("Remove useless ifs", simplified)
+        freevars = N.freevars-e(body)
+        add-phase("Freevars-e", freevars)
+        ans = compile-module(self, l, imports, body, freevars, provides, env)
+        add-phase(string-append("Total simplification: ", tostring(total-time)), nothing)
+        ans
+      end
+    }, false)
+  # false makes `attach-to-object` attach frozen dictionaries
 end
